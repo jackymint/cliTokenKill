@@ -3,6 +3,45 @@
 `ctk` is a Rust CLI that reduces terminal output before it reaches an AI assistant context.
 It is designed for AI coding workflows where command output (logs, diffs, test output, large listings) can consume too many tokens.
 
+## Quick Start (1 Minute)
+
+### 1) Install quickly
+
+```bash
+cargo install --path .
+ctk --help
+```
+
+If you do not want to install into Cargo bin yet:
+
+```bash
+cargo build --release
+./target/release/ctk --help
+```
+
+### 2) Enable auto mode for Codex/Claude
+
+```bash
+ctk init --codex --claude
+exec $SHELL -l
+```
+
+After reloading shell, use AI CLI as usual:
+
+```bash
+codex
+claude
+```
+
+### 3) Use CTK commands directly when needed
+
+```bash
+ctk proxy -- git diff
+ctk test -- cargo test
+ctk err -- cargo check
+ctk explain -- cargo test
+```
+
 ## Why `ctk`?
 
 - **Output-first optimization**: it optimizes by output shape, not by hardcoding command behavior.
@@ -26,6 +65,24 @@ It is designed for AI coding workflows where command output (logs, diffs, test o
 - `init --codex/--claude`: install AI CLI integration (AI-CLI-only)
 - `doctor --codex/--claude`: inspect integration state
 - `uninstall --codex/--claude`: remove integration
+
+## Command Cheatsheet
+
+```bash
+# compact any command
+ctk proxy -- <command>
+
+# focused views
+ctk test -- <test command>
+ctk err -- <build/lint command>
+
+# inspect decisions
+ctk explain -- <command>
+ctk explain-file <path>
+
+# get next chunk
+ctk chunk <chunk_id> 2
+```
 
 ## Architecture
 
@@ -153,7 +210,7 @@ at src/main.rs:10
 These examples are covered by golden tests in `tests/golden/*.input.txt` and
 `tests/golden/*.expected.txt`.
 
-## Install
+## Install (Detailed)
 
 ### Build locally
 
@@ -334,12 +391,19 @@ What it does:
 - creates launchers:
   - `~/.ctk/launchers/codex-ctk`
   - `~/.ctk/launchers/claude-ctk`
+- adds shell aliases in `~/.zshrc` and `~/.bashrc`:
+  - `codex -> ~/.ctk/launchers/codex-ctk`
+  - `claude -> ~/.ctk/launchers/claude-ctk`
 - removes old shell PATH injection blocks (keeps normal shell clean)
 - wrappers compact output only when `CTK_AI_CLI=1`
 
 ### Run AI CLI through CTK
 
 ```bash
+codex   # after opening a new shell
+claude  # after opening a new shell
+
+# direct launchers also work
 ~/.ctk/launchers/codex-ctk
 ~/.ctk/launchers/claude-ctk
 ```
