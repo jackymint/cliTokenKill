@@ -43,14 +43,14 @@ targets = [
 ]
 
 needs_ctk = any(re.search(p, cmd) for p in targets)
-already_wrapped = cmd.startswith("ctk proxy -- ")
+already_wrapped = cmd.startswith("ctk proxy")
 
 if needs_ctk and not already_wrapped:
-    # Build ctk command with --path if working_directory is provided
-    ctk_cmd = "ctk proxy"
+    # Build ctk command with --path
     if working_dir:
-        ctk_cmd += f" --path {working_dir}"
-    ctk_cmd += f" -- {cmd}"
+        ctk_cmd = f"ctk proxy --path {working_dir} -- {cmd}"
+    else:
+        ctk_cmd = f"ctk proxy -- {cmd}"
     
     print(json.dumps({
         "hookSpecificOutput": {
@@ -81,12 +81,12 @@ tool_response = payload.get("tool_response", "")
 text = tool_response if isinstance(tool_response, str) else json.dumps(tool_response)
 too_big = len(text) > 12000
 
-if too_big and not cmd.startswith("ctk proxy -- "):
-    # Build ctk command with --path if working_directory is provided
-    ctk_cmd = "ctk proxy"
+if too_big and not cmd.startswith("ctk proxy"):
+    # Build ctk command with --path
     if working_dir:
-        ctk_cmd += f" --path {working_dir}"
-    ctk_cmd += f" -- {cmd}"
+        ctk_cmd = f"ctk proxy --path {working_dir} -- {cmd}"
+    else:
+        ctk_cmd = f"ctk proxy -- {cmd}"
     
     print(json.dumps({
         "decision": "block",
@@ -94,8 +94,7 @@ if too_big and not cmd.startswith("ctk proxy -- "):
         "hookSpecificOutput": {
             "hookEventName": "PostToolUse",
             "additionalContext": (
-                f"The previous Bash output was large. Prefer rerunning with: "
-                f"{ctk_cmd}"
+                f"The previous Bash output was large. Prefer rerunning with: {ctk_cmd}"
             )
         }
     }))
