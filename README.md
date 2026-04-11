@@ -8,7 +8,7 @@ It is designed for AI coding workflows where command output (logs, diffs, test o
 ### 1) Install quickly
 
 ```bash
-cargo install --path .
+brew install jackymint/tap/ctk
 ctk --help
 ```
 
@@ -317,16 +317,15 @@ test result: FAILED. 2 passed; 1 failed; 0 ignored
 These examples are covered by golden tests in `tests/golden/*.input.txt` and
 `tests/golden/*.expected.txt`.
 
-## Install (Detailed)
+## Install
 
-### Build locally
+### Homebrew (recommended)
 
 ```bash
-cargo build --release
-./target/release/ctk --help
+brew install jackymint/tap/ctk
 ```
 
-### Optional: install into Cargo bin
+### From source
 
 ```bash
 cargo install --path .
