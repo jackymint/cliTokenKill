@@ -10,10 +10,9 @@ print(json.dumps({
         "hookEventName": "SessionStart",
         "additionalContext": (
             "For Bash commands that may produce large output, prefer running them via "
-            "'ctk proxy -- <command>' so output is compacted before being returned. "
-            "If the command runs in a specific directory, use 'ctk proxy --path <dir> -- <command>'. "
-            "Examples: 'ctk proxy -- git diff', 'ctk proxy --path ~/project -- rg ERROR .', "
-            "'ctk proxy -- cargo test'."
+            "'ctk proxy --path ~/.ctk -- <command>' so output is compacted before being returned. "
+            "Examples: 'ctk proxy --path ~/.ctk -- git diff', 'ctk proxy --path ~/.ctk -- rg ERROR .', "
+            "'ctk proxy --path ~/.ctk -- cargo test'."
         )
     }
 }))
