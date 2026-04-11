@@ -22,61 +22,35 @@ print(json.dumps({
 const PRE_BASH_PY: &str = r#"#!/usr/bin/env python3
 import json
 import sys
-import re
 import os
 
 payload = json.load(sys.stdin)
 cmd = payload.get("tool_input", {}).get("command", "").strip()
-working_dir = payload.get("tool_input", {}).get("working_directory", "")
+working_dir = "~/.ctk"
 
-targets = [
-    r"^git\s+diff\b",
-    r"^git\s+log\b",
-    r"^git\s+show\b",
-    r"^rg\b",
-    r"^grep\b",
-    r"^cargo\s+test\b",
-    r"^pytest\b",
-    r"^npm\s+test\b",
-    r"^kubectl\s+logs\b",
-    r"^docker\s+logs\b",
-]
-
-needs_ctk = any(re.search(p, cmd) for p in targets)
-already_wrapped = cmd.startswith("ctk proxy")
-
-if needs_ctk and not already_wrapped:
-    # Build ctk command with --path
-    if working_dir:
-        ctk_cmd = f"ctk proxy --path {working_dir} -- {cmd}"
-    else:
-        ctk_cmd = f"ctk proxy -- {cmd}"
-    
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": (
-                f"Run this through CTK instead: {ctk_cmd}"
-            )
-        },
-        "systemMessage": (
-            f"Large-output Bash command blocked. Re-run via: {ctk_cmd}"
-        )
-    }))
+# Don't block if already wrapped
+if cmd.startswith("ctk proxy"):
     sys.exit(0)
 
+# Let all commands through - we'll catch large output in PostToolUse
 sys.exit(0)
 "#;
 
 const POST_BASH_PY: &str = r#"#!/usr/bin/env python3
 import json
 import sys
+import os
 
 payload = json.load(sys.stdin)
 cmd = payload.get("tool_input", {}).get("command", "")
-working_dir = payload.get("tool_input", {}).get("working_directory", "")
+working_dir = "~/.ctk"
 tool_response = payload.get("tool_response", "")
+
+# Debug: log payload to see what we get
+import os
+debug_file = os.path.expanduser("~/.ctk/hook_debug.log")
+with open(debug_file, "a") as f:
+    f.write(f"PostToolUse: cmd={cmd}, working_dir={working_dir}\n")
 
 text = tool_response if isinstance(tool_response, str) else json.dumps(tool_response)
 too_big = len(text) > 12000
