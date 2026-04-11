@@ -174,7 +174,7 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-fn stats_path() -> PathBuf {
+pub(crate) fn stats_path() -> PathBuf {
     env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."))

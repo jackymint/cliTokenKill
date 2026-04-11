@@ -370,11 +370,28 @@ fn resolve_command_path(command: &str, ignore_prefixes: &[PathBuf]) -> Result<Op
 
 fn wrapper_script(ctk_bin: &Path, real_cmd: &Path) -> String {
     format!(
-        "#!/usr/bin/env bash\nset -euo pipefail\nif [[ \"${{{AI_ENV_FLAG}:-0}}\" != \"1\" ]]; then exec \"{}\" \"$@\"; fi\nif [[ \"${{CTK_BYPASS:-0}}\" == \"1\" ]]; then exec \"{}\" \"$@\"; fi\nexec \"{}\" proxy --level \"${{CTK_LEVEL:-aggressive}}\" --max-lines \"${{CTK_MAX_LINES:-80}}\" --max-chars-per-line \"${{CTK_MAX_CHARS_PER_LINE:-220}}\" -- \"{}\" \"$@\"\n",
-        real_cmd.display(),
-        real_cmd.display(),
-        ctk_bin.display(),
-        real_cmd.display()
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+_ctk_active=0
+if [[ "${{{AI_ENV_FLAG}:-0}}" == "1" ]]; then
+  _ctk_active=1
+else
+  _pid=$PPID
+  for _i in 1 2 3 4 5; do
+    _name=$(ps -p "$_pid" -o comm= 2>/dev/null) || break
+    case "$_name" in
+      codex|claude|gemini) _ctk_active=1; break ;;
+    esac
+    _pid=$(ps -p "$_pid" -o ppid= 2>/dev/null | tr -d ' ') || break
+    [[ "${{_pid:-1}}" -le 1 ]] && break
+  done
+fi
+if [[ "$_ctk_active" != "1" ]]; then exec "{real}" "$@"; fi
+if [[ "${{CTK_BYPASS:-0}}" == "1" ]]; then exec "{real}" "$@"; fi
+exec "{ctk}" proxy --level "${{CTK_LEVEL:-aggressive}}" --max-lines "${{CTK_MAX_LINES:-80}}" --max-chars-per-line "${{CTK_MAX_CHARS_PER_LINE:-220}}" -- "{real}" "$@"
+"#,
+        real = real_cmd.display(),
+        ctk = ctk_bin.display(),
     )
 }
 

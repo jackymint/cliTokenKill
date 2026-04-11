@@ -39,23 +39,37 @@ Output:
 ```
 CTK Monitor
 ────────────────────────────────────
-Active AI CLI   : codex
-Commands/min    : 18
-Saved tokens    : 128,430
-Savings ratio   : 71%
-Fallbacks       : 2
-Chunks created  : 14
+Active AI CLI   : claude
+Commands/min    : 46
+Saved tokens    : 4,688
+Savings ratio   : 61%
+Fallbacks       : 0
+Chunks created  : 0
 
 Top commands
-1. git diff     42
-2. rg           31
-3. cargo test   12
+  1. /usr/bin/git          7
+  2. /bin/ps               12
+  3. /usr/bin/security     12
+  4. /usr/bin/dirname      6
+  5. /usr/local/bin/code   4
 
-Live graph  (last 7 min)
-tokens saved/min: ▁▃▅▇▆▄▂
-latency ms      : ▂▂▃▅▄▂▂
+Tokens saved/min  peak: 4,688 tok
+  ┤            ██
+  ┤      ██    ██  ██
+  ┤  ██  ██    ██  ██
+  ┤  ██  ██    ██  ██
+  ┤  ██  ██    ██  ██
+  └───────────────
+   -7m          now
 
-refreshing every 1s  •  ctrl-c to exit
+Latency ms  peak: 89 ms
+  ┤      ██
+  ┤  ██  ██  ██
+  ┤  ██  ██  ██
+  └───────────────
+   -7m          now
+
+watching ~/.ctk/stats.json  •  ctrl-c to exit
 ```
 
 ### 4) Use CTK commands directly when needed
@@ -547,27 +561,6 @@ Notes:
 
 - If Python `tiktoken` is installed, the script uses it.
 - Otherwise it falls back to `chars/4` estimation.
-
-## Live Monitoring
-
-When `ctk` is active (via `ctk init`), you can monitor token savings in real-time:
-
-```bash
-# In a separate terminal
-ctk monitor
-```
-
-This shows:
-- **Active AI CLI**: Which CLI is currently using `ctk` (codex/claude)
-- **Commands/min**: Throughput of compacted commands
-- **Saved tokens**: Total tokens eliminated via compaction
-- **Savings ratio**: Percentage of tokens saved compared to raw output
-- **Fallbacks**: Commands that fell back to raw output (should be rare)
-- **Chunks created**: Auto-chunked outputs (when output exceeds limit)
-- **Top commands**: Most frequently compacted commands with counts
-- **Live graphs**: Token savings and latency over the last 7 minutes
-
-Stats are persisted to `~/.ctk/stats.json` and updated after each pipeline run.
 
 ## Environment Variables
 
