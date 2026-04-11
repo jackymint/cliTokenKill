@@ -263,9 +263,7 @@ fn compile_regexes(patterns: &[String], file: &Path, name: &str, label: &str) ->
 }
 
 fn parse_level(raw: Option<&str>, file: &Path, name: &str) -> Option<FilterLevel> {
-    let Some(raw) = raw else {
-        return None;
-    };
+    let raw = raw?;
 
     match raw.trim().to_ascii_lowercase().as_str() {
         "none" => Some(FilterLevel::None),

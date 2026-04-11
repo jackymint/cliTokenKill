@@ -63,4 +63,25 @@ mod tests {
         let expected = include_str!("../../tests/golden/stacktrace.expected.txt");
         assert_golden(input, expected, ContentKind::StackTrace);
     }
+
+    #[test]
+    fn golden_grep_compaction() {
+        let input = include_str!("../../tests/golden/grep.input.txt");
+        let expected = include_str!("../../tests/golden/grep.expected.txt");
+        assert_golden(input, expected, ContentKind::GrepLike);
+    }
+
+    #[test]
+    fn golden_table_compaction() {
+        let input = include_str!("../../tests/golden/table.input.txt");
+        let expected = include_str!("../../tests/golden/table.expected.txt");
+        assert_golden(input, expected, ContentKind::TableText);
+    }
+
+    #[test]
+    fn golden_test_output_compaction() {
+        let input = include_str!("../../tests/golden/test_output.input.txt");
+        let expected = include_str!("../../tests/golden/test_output.expected.txt");
+        assert_golden(input, expected, ContentKind::TestOutput);
+    }
 }

@@ -12,13 +12,6 @@ cargo install --path .
 ctk --help
 ```
 
-If you do not want to install into Cargo bin yet:
-
-```bash
-cargo build --release
-./target/release/ctk --help
-```
-
 ### 2) Enable auto mode for Codex/Claude
 
 ```bash
@@ -33,7 +26,53 @@ codex
 claude
 ```
 
-### 3) Use CTK commands directly when needed
+### 3) View live token-saving stats
+
+In a separate terminal:
+
+```bash
+ctk monitor
+```
+
+Output:
+
+```
+CTK Monitor
+────────────────────────────────────
+Active AI CLI   : claude
+Commands/min    : 46
+Saved tokens    : 4,688
+Savings ratio   : 61%
+Fallbacks       : 0
+Chunks created  : 0
+
+Top commands
+  1. /usr/bin/git          7
+  2. /bin/ps               12
+  3. /usr/bin/security     12
+  4. /usr/bin/dirname      6
+  5. /usr/local/bin/code   4
+
+Tokens saved/min  peak: 4,688 tok
+  ┤            ██
+  ┤      ██    ██  ██
+  ┤  ██  ██    ██  ██
+  ┤  ██  ██    ██  ██
+  ┤  ██  ██    ██  ██
+  └───────────────
+   -7m          now
+
+Latency ms  peak: 89 ms
+  ┤      ██
+  ┤  ██  ██  ██
+  ┤  ██  ██  ██
+  └───────────────
+   -7m          now
+
+watching ~/.ctk/stats.json  •  ctrl-c to exit
+```
+
+### 4) Use CTK commands directly when needed
 
 ```bash
 ctk proxy -- git diff
@@ -62,6 +101,7 @@ ctk explain -- cargo test
 - `test`: signal-only test output (fail/error/panic)
 - `err`: signal-only error/warning output
 - `chunk`: fetch stored auto-chunks by id/index
+- `monitor`: view live token-saving stats and top commands
 - `init --codex/--claude`: install AI CLI integration (AI-CLI-only)
 - `doctor --codex/--claude`: inspect integration state
 - `uninstall --codex/--claude`: remove integration
@@ -205,6 +245,73 @@ After:
 Traceback (most recent call last):
 ValueError: bad value
 at src/main.rs:10
+```
+
+### Grep-like Output
+
+Before:
+
+```text
+src/main.rs:42:fn main() {
+src/lib.rs:10:pub mod engine;
+src/main.rs:42:fn main() {
+src/engine.rs:5:use anyhow;
+```
+
+After (sorted, duplicates collapsed):
+
+```text
+src/engine.rs:5:use anyhow;
+src/lib.rs:10:pub mod engine;
+src/main.rs:42:fn main() {  [x2]
+```
+
+### Table Text
+
+Before:
+
+```text
+| Name  | Status | Count |
+|-------|--------|-------|
+| alpha | ok     | 10    |
+| alpha | ok     | 10    |
+| gamma | down   | 0     |
+```
+
+After (duplicate rows collapsed):
+
+```text
+| Name  | Status | Count |
+|-------|--------|-------|
+| alpha | ok     | 10    |  [x2]
+| gamma | down   | 0     |
+```
+
+### Test Output
+
+Before:
+
+```text
+running 3 tests
+test engine::tests::golden_json ... ok
+test engine::tests::golden_diff ... ok
+test engine::tests::golden_log ... FAILED
+
+failures:
+
+---- engine::tests::golden_log stdout ----
+thread 'main' panicked: assertion `left == right` failed
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored
+```
+
+After (signal lines only — fail/error/panic):
+
+```text
+test engine::tests::golden_log ... FAILED
+failures:
+thread 'main' panicked: assertion `left == right` failed
+test result: FAILED. 2 passed; 1 failed; 0 ignored
 ```
 
 These examples are covered by golden tests in `tests/golden/*.input.txt` and

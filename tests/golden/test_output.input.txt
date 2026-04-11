@@ -1,0 +1,11 @@
+running 3 tests
+test engine::tests::golden_json ... ok
+test engine::tests::golden_diff ... ok
+test engine::tests::golden_log ... FAILED
+
+failures:
+
+---- engine::tests::golden_log stdout ----
+thread 'main' panicked: assertion `left == right` failed
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored
