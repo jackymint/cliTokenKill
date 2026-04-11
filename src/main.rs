@@ -353,11 +353,11 @@ fn require_target_selected(codex: bool, claude: bool, verb: &str) -> Result<()> 
 }
 
 fn run_and_exit(command: &[String], path: Option<PathBuf>, config: FilterConfig, mode: PipelineMode) -> Result<()> {
-    if let Some(dir) = path {
-        std::env::set_current_dir(&dir)
+    if let Some(ref dir) = path {
+        std::env::set_current_dir(dir)
             .with_context(|| format!("failed to change directory to {}", dir.display()))?;
     }
-    
+
     let start = Instant::now();
     let result = run_pipeline(command, config, mode)?;
     let latency_ms = start.elapsed().as_millis() as u64;
@@ -371,7 +371,7 @@ fn run_and_exit(command: &[String], path: Option<PathBuf>, config: FilterConfig,
     let chunk = maybe_auto_chunk(budgeted)?;
     let new_chunks = u64::from(print_pipeline_output(chunk));
 
-    record_stats(command, raw_chars, filtered_chars, latency_ms, fallback_used, new_chunks);
+    record_stats(command, path, raw_chars, filtered_chars, latency_ms, fallback_used, new_chunks);
 
     if fallback_used {
         eprintln!("ctk: filter fallback to raw output");
@@ -384,6 +384,7 @@ fn run_and_exit(command: &[String], path: Option<PathBuf>, config: FilterConfig,
 
 fn record_stats(
     command: &[String],
+    _path: Option<PathBuf>,
     raw_chars: usize,
     filtered_chars: usize,
     latency_ms: u64,
