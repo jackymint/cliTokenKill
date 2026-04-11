@@ -20,6 +20,7 @@ use std::path::PathBuf;
 #[derive(Parser)]
 #[command(
     name = "ctk",
+    version,
     about = "cliTokenKill - compact command output for LLM workflows"
 )]
 struct Cli {

@@ -1,7 +1,7 @@
 use crate::core::budget::{BudgetResult, apply_token_budget_with_report};
 use crate::core::chunk::{ChunkPlan, plan_auto_chunk};
 use crate::core::filter::{FilterConfig, FilterLevel};
-use crate::core::pipeline::{PipelineMode, PipelineStrategy, run_pipeline};
+use crate::core::pipeline::{PipelineMode, PipelineStageReport, PipelineStrategy, run_pipeline};
 use crate::engine::{ContentKind, classify_content, compact_by_kind};
 use anyhow::{Context, Result};
 use std::fs;
@@ -24,6 +24,7 @@ pub fn explain_command(command: &[String], config: FilterConfig, mode: PipelineM
         "lines: raw={} filtered={} removed={}",
         result.details.raw_lines, result.details.filtered_lines, result.details.dropped_lines
     );
+    print_stage_reports(&result.details.stage_reports);
     println!(
         "trim cause: max-lines={} token-budget={}",
         max_lines_trimmed, budget.trimmed
@@ -142,6 +143,16 @@ fn print_chunk_summary(chunk: &ChunkPlan) {
         "chunk: triggered={} chunks={} lines={}",
         chunk.triggered, chunk.total_chunks, chunk.total_lines
     );
+}
+
+fn print_stage_reports(stage_reports: &[PipelineStageReport]) {
+    println!("pipeline stages:");
+    for stage in stage_reports {
+        println!(
+            " - {}: selected={} lines {} -> {} ({})",
+            stage.stage, stage.selected, stage.lines_before, stage.lines_after, stage.reason
+        );
+    }
 }
 
 fn has_max_line_trim_marker(text: &str) -> bool {
