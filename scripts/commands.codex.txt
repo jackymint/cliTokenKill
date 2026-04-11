@@ -1,0 +1,6 @@
+# Replace with commands Codex usually triggers in your real tasks
+rg --files | head -n 300
+rg "TODO|FIXME|panic" -n src | head -n 300
+git status --short
+git diff -- src/main.rs
+cargo check
