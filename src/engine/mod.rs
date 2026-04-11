@@ -15,6 +15,22 @@ pub enum ContentKind {
     Plain,
 }
 
+impl ContentKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ContentKind::Json => "json",
+            ContentKind::Ndjson => "ndjson",
+            ContentKind::Diff => "diff",
+            ContentKind::GrepLike => "grep-like",
+            ContentKind::StackTrace => "stack-trace",
+            ContentKind::TestOutput => "test-output",
+            ContentKind::TableText => "table-text",
+            ContentKind::LogStream => "log-stream",
+            ContentKind::Plain => "plain",
+        }
+    }
+}
+
 pub fn classify_content(output: &str) -> ContentKind {
     let trimmed = output.trim();
     if trimmed.is_empty() {
@@ -36,14 +52,14 @@ pub fn classify_content(output: &str) -> ContentKind {
     if looks_like_test_output(output) {
         return ContentKind::TestOutput;
     }
+    if looks_like_log(output) {
+        return ContentKind::LogStream;
+    }
     if looks_like_grep(output) {
         return ContentKind::GrepLike;
     }
     if looks_like_table(output) {
         return ContentKind::TableText;
-    }
-    if looks_like_log(output) {
-        return ContentKind::LogStream;
     }
 
     ContentKind::Plain
@@ -166,7 +182,7 @@ fn looks_like_ndjson(output: &str) -> bool {
         .filter(|l| !l.trim().is_empty())
         .take(5)
         .collect();
-    !lines.is_empty()
+    lines.len() >= 2
         && lines
             .iter()
             .all(|l| serde_json::from_str::<Value>(l.trim()).is_ok())
@@ -207,4 +223,62 @@ fn looks_like_table(output: &str) -> bool {
 fn looks_like_log(output: &str) -> bool {
     let ts = Regex::new(r"\d{4}-\d{2}-\d{2}").expect("valid timestamp regex");
     output.lines().take(10).filter(|l| ts.is_match(l)).count() >= 3
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn golden_config() -> FilterConfig {
+        FilterConfig {
+            level: FilterLevel::Minimal,
+            max_lines: 120,
+            max_chars_per_line: 240,
+        }
+    }
+
+    fn normalize(text: &str) -> String {
+        text.trim_end().replace("\r\n", "\n")
+    }
+
+    fn assert_golden(input: &str, expected: &str, kind: ContentKind) {
+        assert_eq!(classify_content(input), kind);
+        let actual = compact_by_kind(input, kind, golden_config());
+        assert_eq!(normalize(&actual), normalize(expected));
+    }
+
+    #[test]
+    fn golden_json_compaction() {
+        let input = include_str!("../../tests/golden/json.input.txt");
+        let expected = include_str!("../../tests/golden/json.expected.txt");
+        assert_golden(input, expected, ContentKind::Json);
+    }
+
+    #[test]
+    fn golden_ndjson_compaction() {
+        let input = include_str!("../../tests/golden/ndjson.input.txt");
+        let expected = include_str!("../../tests/golden/ndjson.expected.txt");
+        assert_golden(input, expected, ContentKind::Ndjson);
+    }
+
+    #[test]
+    fn golden_diff_compaction() {
+        let input = include_str!("../../tests/golden/diff.input.txt");
+        let expected = include_str!("../../tests/golden/diff.expected.txt");
+        assert_golden(input, expected, ContentKind::Diff);
+    }
+
+    #[test]
+    fn golden_log_compaction() {
+        let input = include_str!("../../tests/golden/log.input.txt");
+        let expected = include_str!("../../tests/golden/log.expected.txt");
+        assert_golden(input, expected, ContentKind::LogStream);
+    }
+
+    #[test]
+    fn golden_stacktrace_compaction() {
+        let input = include_str!("../../tests/golden/stacktrace.input.txt");
+        let expected = include_str!("../../tests/golden/stacktrace.expected.txt");
+        assert_golden(input, expected, ContentKind::StackTrace);
+    }
 }

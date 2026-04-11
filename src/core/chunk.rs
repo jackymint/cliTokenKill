@@ -7,6 +7,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const AUTO_CHUNK_TRIGGER_LINES: usize = 140;
 const CHUNK_SIZE_LINES: usize = 80;
 
+pub struct ChunkPlan {
+    pub triggered: bool,
+    pub total_chunks: usize,
+    pub total_lines: usize,
+}
+
 pub enum ChunkedText {
     Inline(String),
     Stored {
@@ -16,11 +22,30 @@ pub enum ChunkedText {
     },
 }
 
+pub fn plan_auto_chunk(text: &str) -> ChunkPlan {
+    let total_lines = text.lines().count();
+    if total_lines <= AUTO_CHUNK_TRIGGER_LINES {
+        return ChunkPlan {
+            triggered: false,
+            total_chunks: 1,
+            total_lines,
+        };
+    }
+
+    let total_chunks = total_lines.div_ceil(CHUNK_SIZE_LINES);
+    ChunkPlan {
+        triggered: true,
+        total_chunks: total_chunks.max(1),
+        total_lines,
+    }
+}
+
 pub fn maybe_auto_chunk(text: String) -> Result<ChunkedText> {
-    let lines: Vec<&str> = text.lines().collect();
-    if lines.len() <= AUTO_CHUNK_TRIGGER_LINES {
+    let plan = plan_auto_chunk(&text);
+    if !plan.triggered {
         return Ok(ChunkedText::Inline(text));
     }
+    let lines: Vec<&str> = text.lines().collect();
 
     let id = generate_id();
     let chunks: Vec<String> = lines

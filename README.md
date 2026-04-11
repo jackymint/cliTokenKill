@@ -16,14 +16,16 @@ It is designed for AI coding workflows where command output (logs, diffs, test o
 ## Features
 
 - `proxy`: run any command and compact output
+- `explain`: inspect classifier/filter/budget decisions for a command
+- `explain-file`: inspect classifier/filter/budget decisions for a file
 - `read`: compact file content
 - `git status|diff`: convenience Git subcommands
 - `test`: signal-only test output (fail/error/panic)
 - `err`: signal-only error/warning output
 - `chunk`: fetch stored auto-chunks by id/index
-- `init --codex`: install Codex integration (AI-CLI-only)
-- `doctor --codex`: inspect integration state
-- `uninstall --codex`: remove integration
+- `init --codex/--claude`: install AI CLI integration (AI-CLI-only)
+- `doctor --codex/--claude`: inspect integration state
+- `uninstall --codex/--claude`: remove integration
 
 ## Architecture
 
@@ -42,6 +44,114 @@ It is designed for AI coding workflows where command output (logs, diffs, test o
 3. **AI delivery control**
    - token budget gating
    - automatic chunking + chunk retrieval
+
+## Content-Aware Examples
+
+The engine classifies output shape and applies a strategy per kind.
+
+### JSON
+
+Before:
+
+```json
+{"status":"ok","trace":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+```
+
+After:
+
+```json
+{
+  "status": "ok",
+  "trace": "<str:long>"
+}
+```
+
+### NDJSON
+
+Before:
+
+```text
+{"level":"info","msg":"start"}
+{"level":"error","msg":"boom"}
+{"level":"error","msg":"boom"}
+```
+
+After:
+
+```text
+{"level":"info","msg":"start"}
+{"level":"error","msg":"boom"}  [x2]
+```
+
+### Diff
+
+Before:
+
+```diff
+diff --git a/a.txt b/a.txt
+index 1111111..2222222 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1,2 +1,2 @@
+ unchanged line
+-line old
++line new
+ context line
+```
+
+After:
+
+```diff
+diff --git a/a.txt b/a.txt
+index 1111111..2222222 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1,2 +1,2 @@
+-line old
++line new
+```
+
+### Logs
+
+Before:
+
+```text
+2026-04-11 10:00:00 INFO boot
+2026-04-11 10:00:01 INFO boot
+2026-04-11 10:00:01 INFO boot
+2026-04-11 10:00:02 ERROR fail
+```
+
+After:
+
+```text
+2026-04-11 10:00:00 INFO boot
+2026-04-11 10:00:01 INFO boot  [x2]
+2026-04-11 10:00:02 ERROR fail
+```
+
+### Stack Trace
+
+Before:
+
+```text
+Traceback (most recent call last):
+  File "app.py", line 10, in <module>
+    run()
+ValueError: bad value
+at src/main.rs:10
+```
+
+After:
+
+```text
+Traceback (most recent call last):
+ValueError: bad value
+at src/main.rs:10
+```
+
+These examples are covered by golden tests in `tests/golden/*.input.txt` and
+`tests/golden/*.expected.txt`.
 
 ## Install
 
@@ -75,6 +185,11 @@ ctk git diff
 # Test/error-focused views
 ctk test -- cargo test
 ctk err -- cargo check
+
+# Explain classification + filtering decisions
+ctk explain -- cargo test
+ctk explain --mode err -- cargo check
+ctk explain-file README.md
 ```
 
 ## Output Controls
@@ -95,6 +210,64 @@ ctk proxy \
   -- npm run build
 ```
 
+## Plugin Adapters (Org-Specific Parser/Filter)
+
+`ctk` can load command-specific adapters from TOML files so your team can add
+custom parser/filter rules without touching `ctk` core code.
+
+Adapter lookup paths:
+
+- project scope: `./.ctk/adapters/*.toml`
+- user-global scope: `~/.ctk/adapters/*.toml`
+
+Rules are loaded in this order:
+
+1. project adapters
+2. user-global adapters
+
+Within the combined set, higher `priority` runs first.
+
+### Adapter Schema
+
+Each file can define one or more adapters using `[[adapter]]`.
+
+```toml
+[[adapter]]
+name = "corp-cargo-test"
+match_command = "^cargo test"
+priority = 50
+signal_patterns = ["failed", "panic", "error:"]
+exclude_patterns = ["^note:"]
+level = "minimal"             # none | minimal | aggressive
+max_lines = 80
+max_chars_per_line = 220
+on_empty = "ok: no failures"
+```
+
+Field behavior:
+
+- `name`: display/debug name for the adapter
+- `match_command`: regex matched against full command line (e.g. `cargo test --all`)
+- `priority`: higher value wins (`0` default)
+- `signal_patterns`: optional patterns to extract signal lines first
+- `include_patterns`: optional allowlist regexes (keep matching lines only)
+- `exclude_patterns`: optional denylist regexes (drop matching lines)
+- `level`, `max_lines`, `max_chars_per_line`: optional overrides
+- `on_empty`: fallback message if all lines are filtered out
+
+If an adapter does not match (or produces no output), `ctk` falls back to the
+built-in classifier/compactor behavior automatically.
+
+Starter template: `examples/adapters/cargo-test.toml`
+
+### Adapter Debug
+
+Enable adapter load/match logs:
+
+```bash
+CTK_ADAPTER_DEBUG=1 ctk proxy -- cargo test
+```
+
 ## Token Budget Gate
 
 `ctk` applies a post-compaction token budget gate.
@@ -109,6 +282,24 @@ CTK_TOKEN_BUDGET=600 ctk proxy -- sh -lc 'seq 1 2000'
 ```
 
 When budget is exceeded, `ctk` keeps a useful head/tail slice and inserts a `budget-trim` marker.
+
+## Explain Mode
+
+Use `ctk explain` to inspect what the pipeline did for a command:
+
+- classifier result (`json`, `ndjson`, `diff`, `log-stream`, etc.)
+- strategy used (`content-aware`, `signal-only`, `adapter`, or `fallback`)
+- raw vs filtered line counts and removed lines
+- budget token estimate before/after, plus trim marker line
+
+Example:
+
+```bash
+ctk explain -- cargo test
+ctk explain --mode err -- cargo check
+ctk explain --mode test -- cargo test
+ctk explain-file src/main.rs
+```
 
 ## Auto Chunking
 
@@ -125,7 +316,7 @@ ctk chunk <chunk_id> 2
 ctk chunk <chunk_id> 3
 ```
 
-## Codex Integration (AI-CLI-only)
+## AI CLI Integration (AI-CLI-only)
 
 `ctk` supports an integration mode designed to affect **only AI CLI sessions**.
 
@@ -133,22 +324,27 @@ ctk chunk <chunk_id> 3
 
 ```bash
 ctk init --codex
+ctk init --claude
+ctk init --codex --claude
 ```
 
 What it does:
 
 - creates wrappers in `~/.ctk/bin`
-- creates launcher: `~/.ctk/launchers/codex-ctk`
+- creates launchers:
+  - `~/.ctk/launchers/codex-ctk`
+  - `~/.ctk/launchers/claude-ctk`
 - removes old shell PATH injection blocks (keeps normal shell clean)
 - wrappers compact output only when `CTK_AI_CLI=1`
 
-### Run Codex through CTK
+### Run AI CLI through CTK
 
 ```bash
 ~/.ctk/launchers/codex-ctk
+~/.ctk/launchers/claude-ctk
 ```
 
-This launcher sets:
+These launchers set:
 
 - `CTK_AI_CLI=1`
 - `PATH="$HOME/.ctk/bin:$PATH"`
@@ -159,13 +355,17 @@ So compaction is active in that AI CLI session, while normal terminal sessions r
 
 ```bash
 ctk doctor --codex
-ctk doctor --codex --fix
+ctk doctor --claude
+ctk doctor --codex --claude
+ctk doctor --codex --claude --fix
 ```
 
 ### Remove integration
 
 ```bash
 ctk uninstall --codex
+ctk uninstall --claude
+ctk uninstall --codex --claude
 ```
 
 ## Benchmarking
@@ -176,6 +376,15 @@ Use the included script to compare raw vs compacted token estimates:
 ./scripts/bench_tokens.sh
 ./scripts/bench_tokens.sh scripts/commands.codex.txt
 ```
+
+Example snapshot (run on this repo, 2026-04-11):
+
+| Command | Raw Tokens | CTK Tokens | Saved |
+| --- | ---: | ---: | ---: |
+| `git diff` | 7205 | 900 | 87% |
+| `cargo test` | 206 | 24 | 88% |
+| `rg --line-number "fn " src` | 1989 | 892 | 55% |
+| **Total** | **9400** | **1816** | **80%** |
 
 Notes:
 
@@ -190,12 +399,13 @@ Notes:
 - `CTK_MAX_CHARS_PER_LINE` - wrapper default per-line char cap
 - `CTK_BYPASS=1` - bypass compaction and execute raw command
 - `CTK_AI_CLI=1` - enable wrapper compaction mode (set by launcher)
+- `CTK_ADAPTER_DEBUG=1` - print adapter loading/match diagnostics
 
 ## Typical Workflow
 
 1. Build `ctk`
-2. Run `ctk init --codex`
-3. Start AI CLI with `~/.ctk/launchers/codex-ctk`
+2. Run `ctk init --codex` and/or `ctk init --claude`
+3. Start AI CLI with the corresponding launcher (`codex-ctk` or `claude-ctk`)
 4. Work normally while command output is compacted/chunked
 5. Use `ctk chunk <id> <n>` only when more context is needed
 

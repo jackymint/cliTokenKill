@@ -62,6 +62,14 @@ struct CodexLayout {
 }
 
 pub fn init_codex() -> Result<InitResult> {
+    init_agent("codex", "codex-ctk")
+}
+
+pub fn init_claude() -> Result<InitResult> {
+    init_agent("claude", "claude-ctk")
+}
+
+fn init_agent(agent_cmd: &str, launcher_file: &str) -> Result<InitResult> {
     let layout = CodexLayout::load()?;
     fs::create_dir_all(&layout.bin_dir)
         .with_context(|| format!("failed to create directory: {}", layout.bin_dir.display()))?;
@@ -81,7 +89,7 @@ pub fn init_codex() -> Result<InitResult> {
         wrappers_installed.push(cmd);
     }
 
-    let launcher_path = create_codex_launcher(&layout)?;
+    let launcher_path = create_launcher(&layout, agent_cmd, launcher_file)?;
     let rc_files_updated = remove_all_rc_path_blocks(&layout.home)?;
 
     Ok(InitResult {
@@ -93,19 +101,42 @@ pub fn init_codex() -> Result<InitResult> {
 }
 
 pub fn uninstall_codex() -> Result<UninstallResult> {
+    uninstall_agent("codex-ctk")
+}
+
+pub fn uninstall_claude() -> Result<UninstallResult> {
+    uninstall_agent("claude-ctk")
+}
+
+fn uninstall_agent(launcher_file: &str) -> Result<UninstallResult> {
     let layout = CodexLayout::load()?;
 
-    let removed_wrapper_files = if layout.bin_dir.exists() {
+    let launcher_path = layout.launchers_dir.join(launcher_file);
+    if launcher_path.exists() {
+        fs::remove_file(&launcher_path)
+            .with_context(|| format!("failed to remove launcher: {}", launcher_path.display()))?;
+    }
+
+    let mut removed_dir = false;
+    if layout.launchers_dir.exists() {
+        let launchers_left = fs::read_dir(&layout.launchers_dir)?
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_file())
+            .count();
+        if launchers_left == 0 {
+            fs::remove_dir_all(&layout.launchers_dir).ok();
+        }
+    }
+
+    let removed_wrapper_files = if layout.launchers_dir.exists() {
+        0usize
+    } else if layout.bin_dir.exists() {
         clear_wrapper_dir(&layout.bin_dir)?
     } else {
         0usize
     };
 
-    let mut removed_dir = false;
-    if layout.launchers_dir.exists() {
-        fs::remove_dir_all(&layout.launchers_dir).ok();
-    }
-    if layout.bin_dir.exists() {
+    if !layout.launchers_dir.exists() && layout.bin_dir.exists() {
         removed_dir = fs::remove_dir(&layout.bin_dir).is_ok();
     }
 
@@ -119,14 +150,22 @@ pub fn uninstall_codex() -> Result<UninstallResult> {
 }
 
 pub fn doctor_codex(fix: bool) -> Result<DoctorResult> {
+    doctor_agent(fix, "codex", "codex-ctk")
+}
+
+pub fn doctor_claude(fix: bool) -> Result<DoctorResult> {
+    doctor_agent(fix, "claude", "claude-ctk")
+}
+
+fn doctor_agent(fix: bool, agent_cmd: &str, launcher_file: &str) -> Result<DoctorResult> {
     let mut repaired = false;
     if fix {
-        init_codex()?;
+        init_agent(agent_cmd, launcher_file)?;
         repaired = true;
     }
 
     let layout = CodexLayout::load()?;
-    let launcher_exists = layout.launchers_dir.join("codex-ctk").exists();
+    let launcher_exists = layout.launchers_dir.join(launcher_file).exists();
 
     let wrappers_count = if layout.bin_dir.exists() {
         fs::read_dir(&layout.bin_dir)?
@@ -260,8 +299,12 @@ fn link_ctk_binary(bin_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn create_codex_launcher(layout: &CodexLayout) -> Result<Option<PathBuf>> {
-    let Some(real_codex) = resolve_command_path("codex", &[layout.bin_dir.clone()])? else {
+fn create_launcher(
+    layout: &CodexLayout,
+    agent_cmd: &str,
+    launcher_file: &str,
+) -> Result<Option<PathBuf>> {
+    let Some(real_agent) = resolve_command_path(agent_cmd, &[layout.bin_dir.clone()])? else {
         return Ok(None);
     };
 
@@ -271,11 +314,11 @@ fn create_codex_launcher(layout: &CodexLayout) -> Result<Option<PathBuf>> {
             layout.launchers_dir.display()
         )
     })?;
-    let launcher_path = layout.launchers_dir.join("codex-ctk");
+    let launcher_path = layout.launchers_dir.join(launcher_file);
 
     let script = format!(
         "#!/usr/bin/env bash\nset -euo pipefail\nexport {AI_ENV_FLAG}=1\nexport PATH=\"$HOME/.ctk/bin:$PATH\"\nexec \"{}\" \"$@\"\n",
-        real_codex.display()
+        real_agent.display()
     );
     fs::write(&launcher_path, script)
         .with_context(|| format!("failed to write launcher: {}", launcher_path.display()))?;
