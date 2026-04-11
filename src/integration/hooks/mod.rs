@@ -10,9 +10,9 @@ print(json.dumps({
         "hookEventName": "SessionStart",
         "additionalContext": (
             "For Bash commands that may produce large output, prefer running them via "
-            "'ctk proxy --path ~/.ctk -- <command>' so output is compacted before being returned. "
-            "Examples: 'ctk proxy --path ~/.ctk -- git diff', 'ctk proxy --path ~/.ctk -- rg ERROR .', "
-            "'ctk proxy --path ~/.ctk -- cargo test'."
+            "'ctk proxy -- <command>' so output is compacted before being returned. "
+            "Examples: 'ctk proxy -- git diff', 'ctk proxy -- rg ERROR .', "
+            "'ctk proxy -- cargo test'."
         )
     }
 }))
@@ -47,7 +47,7 @@ text = tool_response if isinstance(tool_response, str) else json.dumps(tool_resp
 too_big = len(text) > 12000
 
 if too_big and not cmd.startswith("ctk proxy"):
-    ctk_cmd = f"ctk proxy --path ~/.ctk -- {cmd}"
+    ctk_cmd = f"ctk proxy -- {cmd}"
     
     print(json.dumps({
         "decision": "block",
