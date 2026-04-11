@@ -384,7 +384,7 @@ fn run_and_exit(command: &[String], path: Option<PathBuf>, config: FilterConfig,
 
 fn record_stats(
     command: &[String],
-    path: Option<PathBuf>,
+    _path: Option<PathBuf>,
     raw_chars: usize,
     filtered_chars: usize,
     latency_ms: u64,
