@@ -2,7 +2,6 @@ mod core;
 mod debug;
 mod engine;
 mod integration;
-mod mcp;
 mod monitor;
 mod report;
 mod stats;
@@ -17,7 +16,6 @@ use debug::explain::{explain_command, explain_file};
 use engine::{classify_content, compact_by_kind};
 use integration::claude::{doctor_claude, init_claude, uninstall_claude};
 use integration::codex::{doctor_codex, init_codex, uninstall_codex};
-use mcp::server::run_mcp_server;
 use monitor::run_monitor;
 use report::{print_doctor_result, print_init_result, print_pipeline_output, print_uninstall_result};
 use stats::Stats;
@@ -154,8 +152,6 @@ enum Commands {
     },
     /// Show live token-saving stats dashboard
     Monitor,
-    /// Run MCP server for AI tool integration
-    Mcp,
 }
 
 #[derive(Subcommand)]
@@ -257,7 +253,6 @@ fn handle_command(command: Commands) -> Result<()> {
             handle_doctor(codex, claude, fix)?;
         }
         Commands::Monitor => run_monitor()?,
-        Commands::Mcp => run_mcp_server()?,
     }
     Ok(())
 }
