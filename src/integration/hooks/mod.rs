@@ -26,7 +26,7 @@ import os
 
 payload = json.load(sys.stdin)
 cmd = payload.get("tool_input", {}).get("command", "").strip()
-working_dir = "~/.ctk"
+working_dir = payload.get("tool_input", {}).get("working_directory", &quot;~/.ctk&quot;)
 
 # Don't block if already wrapped
 if cmd.startswith("ctk proxy"):
@@ -43,7 +43,7 @@ import os
 
 payload = json.load(sys.stdin)
 cmd = payload.get("tool_input", {}).get("command", "")
-working_dir = "~/.ctk"
+working_dir = payload.get("tool_input", {}).get("working_directory", &quot;~/.ctk&quot;)
 tool_response = payload.get("tool_response", "")
 
 # Debug: log payload to see what we get
