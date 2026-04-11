@@ -1,6 +1,6 @@
 [package]
 name = "cli-token-kill"
-version = "0.18.0"
+version = "0.20.0"
 edition = "2024"
 authors = ["Jacky Mint"]
 description = "Reduce terminal output before it reaches AI assistant context"
