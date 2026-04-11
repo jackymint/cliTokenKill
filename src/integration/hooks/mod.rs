@@ -10,9 +10,9 @@ print(json.dumps({
         "hookEventName": "SessionStart",
         "additionalContext": (
             "For Bash commands that may produce large output, prefer running them via "
-            "'ctk proxy --path ~/.ctk -- <command>' so output is compacted before being returned. "
-            "Examples: 'ctk proxy --path ~/.ctk -- git diff', 'ctk proxy --path ~/.ctk -- rg ERROR .', "
-            "'ctk proxy --path ~/.ctk -- cargo test'."
+            "'ctk proxy -- <command>' so output is compacted before being returned. "
+            "Examples: 'ctk proxy -- git diff', 'ctk proxy -- rg ERROR .', "
+            "'ctk proxy -- cargo test'."
         )
     }
 }))
@@ -30,7 +30,18 @@ cmd = payload.get("tool_input", {}).get("command", "").strip()
 if cmd.startswith("ctk proxy"):
     sys.exit(0)
 
-# Let all commands through - we'll catch large output in PostToolUse
+# Block and require ctk proxy for all commands
+ctk_cmd = f"ctk proxy -- {cmd}"
+print(json.dumps({
+    "decision": "block",
+    "reason": "All Bash commands must use CTK proxy for output compaction.",
+    "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "additionalContext": (
+            f"Please run this command via CTK: {ctk_cmd}"
+        )
+    }
+}))
 sys.exit(0)
 "#;
 
@@ -47,7 +58,7 @@ text = tool_response if isinstance(tool_response, str) else json.dumps(tool_resp
 too_big = len(text) > 12000
 
 if too_big and not cmd.startswith("ctk proxy"):
-    ctk_cmd = f"ctk proxy --path ~/.ctk -- {cmd}"
+    ctk_cmd = f"ctk proxy -- {cmd}"
     
     print(json.dumps({
         "decision": "block",
