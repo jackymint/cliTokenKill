@@ -371,7 +371,7 @@ fn run_and_exit(command: &[String], path: Option<PathBuf>, config: FilterConfig,
     let chunk = maybe_auto_chunk(budgeted)?;
     let new_chunks = u64::from(print_pipeline_output(chunk));
 
-    record_stats(command, path, raw_chars, filtered_chars, latency_ms, fallback_used, new_chunks);
+    record_stats(command, raw_chars, filtered_chars, latency_ms, fallback_used, new_chunks);
 
     if fallback_used {
         eprintln!("ctk: filter fallback to raw output");
@@ -384,7 +384,6 @@ fn run_and_exit(command: &[String], path: Option<PathBuf>, config: FilterConfig,
 
 fn record_stats(
     command: &[String],
-    _path: Option<PathBuf>,
     raw_chars: usize,
     filtered_chars: usize,
     latency_ms: u64,
