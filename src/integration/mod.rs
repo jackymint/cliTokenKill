@@ -1,4 +1,5 @@
 mod agent;
+mod hooks;
 pub mod claude;
 pub mod codex;
 
