@@ -11,10 +11,9 @@ use core::filter::{FilterConfig, FilterLevel};
 use core::pipeline::{PipelineMode, run_pipeline};
 use debug::explain::{explain_command, explain_file};
 use engine::{classify_content, compact_by_kind};
-use integration::codex::{
-    DoctorResult, InitResult, UninstallResult, doctor_claude, doctor_codex, init_claude,
-    init_codex, uninstall_claude, uninstall_codex,
-};
+use integration::claude::{doctor_claude, init_claude, uninstall_claude};
+use integration::codex::{doctor_codex, init_codex, uninstall_codex};
+use integration::{DoctorResult, InitResult, UninstallResult};
 use std::fs;
 use std::path::PathBuf;
 
@@ -347,7 +346,12 @@ fn print_init_result(target: &str, result: &InitResult) {
         println!("launcher: {target} not found in PATH");
     }
     print_rc_update_summary(&result.rc_files_updated, "already clean");
-    println!("next: run {target} via launcher");
+    if result.launcher_path.is_some() {
+        println!("shell alias: {target} -> ~/.ctk/launchers/{target}-ctk");
+        println!("next: open a new shell, then run: {target}");
+    } else {
+        println!("next: run {target} via launcher once available");
+    }
 }
 
 fn print_uninstall_result(target: &str, result: &UninstallResult) {
@@ -361,6 +365,10 @@ fn print_uninstall_result(target: &str, result: &UninstallResult) {
 fn print_doctor_result(target: &str, d: &DoctorResult) {
     println!("ctk doctor ({target})");
     println!("repaired: {}", d.repaired);
+    match &d.real_command_path {
+        Some(path) => println!("real {target} binary: {}", path.display()),
+        None => println!("real {target} binary: not found"),
+    }
     println!("ctk wrapper dir in PATH: {}", d.ctk_in_path);
     if let Some(v) = d.ctk_in_login_shell_path {
         println!("ctk wrapper dir in login shell PATH: {v}");
@@ -368,11 +376,60 @@ fn print_doctor_result(target: &str, d: &DoctorResult) {
         println!("ctk wrapper dir in login shell PATH: unknown");
     }
     println!("launcher exists: {}", d.launcher_exists);
-    println!("wrappers count: {}", d.wrappers_count);
+    println!("launcher path: {}", d.launcher_path.display());
+    match &d.launcher_exec_path {
+        Some(path) => println!("launcher exec target: {}", path.display()),
+        None => println!("launcher exec target: unknown"),
+    }
+    match d.launcher_selected_first {
+        Some(v) => println!("launcher selected first: {v}"),
+        None => println!("launcher selected first: unknown"),
+    }
+    match &d.shell_selected {
+        Some(selected) => println!("shell resolves first: {selected}"),
+        None => println!("shell resolves first: unknown"),
+    }
+    match &d.ai_cli_env {
+        Some(v) => println!("CTK_AI_CLI: set ({v})"),
+        None => println!("CTK_AI_CLI: unset"),
+    }
+    match &d.bypass_env {
+        Some(v) => println!("CTK_BYPASS: set ({v})"),
+        None => println!("CTK_BYPASS: unset"),
+    }
+    println!("bypass enabled: {}", d.bypass_enabled);
+    println!("which -a {target}:");
+    if d.command_matches.is_empty() {
+        println!(" - (no match)");
+    } else {
+        for path in &d.command_matches {
+            println!(" - {path}");
+        }
+    }
+    println!("type -a {target} (login shell):");
+    if d.shell_type_chain.is_empty() {
+        println!(" - (no output)");
+    } else {
+        for line in &d.shell_type_chain {
+            println!(" - {line}");
+        }
+    }
+    println!("wrapped commands ({}):", d.wrappers_count);
+    if d.wrapped_commands.is_empty() {
+        println!(" - (none)");
+    } else {
+        for cmd in &d.wrapped_commands {
+            println!(" - {cmd}");
+        }
+    }
     println!("PATH head:");
     for p in &d.path_head {
         println!(" - {p}");
     }
+    if d.launcher_exists && d.launcher_selected_first == Some(false) {
+        println!("hint: launcher is not first in PATH resolution; reopen shell or fix alias order");
+    }
+    println!("hint: if your shell still uses cached command paths, run: hash -r");
 }
 
 fn print_wrappers_summary(wrappers: &[String]) {
