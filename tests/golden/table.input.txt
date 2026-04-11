@@ -1,0 +1,5 @@
+| Name  | Status | Count |
+|-------|--------|-------|
+| alpha | ok     | 10    |
+| alpha | ok     | 10    |
+| gamma | down   | 0     |

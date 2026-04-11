@@ -1,0 +1,4 @@
+test engine::tests::golden_log ... FAILED
+failures:
+thread 'main' panicked: assertion `left == right` failed
+test result: FAILED. 2 passed; 1 failed; 0 ignored

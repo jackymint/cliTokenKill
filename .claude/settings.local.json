@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)",
+      "Bash(/Users/admin/.cargo/bin/cargo clippy:*)",
+      "Bash(/Users/admin/.cargo/bin/cargo test:*)"
+    ]
+  }
+}

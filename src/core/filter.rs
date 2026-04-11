@@ -37,11 +37,11 @@ pub fn compact_output(input: &str, config: FilterConfig) -> String {
         }
         prev_was_empty = is_empty;
 
-        if let Some((last, count)) = runs.last_mut() {
-            if *last == line {
-                *count += 1;
-                continue;
-            }
+        if let Some((last, count)) = runs.last_mut()
+            && *last == line
+        {
+            *count += 1;
+            continue;
         }
         runs.push((line, 1));
     }

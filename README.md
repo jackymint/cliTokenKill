@@ -12,13 +12,6 @@ cargo install --path .
 ctk --help
 ```
 
-If you do not want to install into Cargo bin yet:
-
-```bash
-cargo build --release
-./target/release/ctk --help
-```
-
 ### 2) Enable auto mode for Codex/Claude
 
 ```bash
@@ -33,7 +26,39 @@ codex
 claude
 ```
 
-### 3) Use CTK commands directly when needed
+### 3) View live token-saving stats
+
+In a separate terminal:
+
+```bash
+ctk monitor
+```
+
+Output:
+
+```
+CTK Monitor
+────────────────────────────────────
+Active AI CLI   : codex
+Commands/min    : 18
+Saved tokens    : 128,430
+Savings ratio   : 71%
+Fallbacks       : 2
+Chunks created  : 14
+
+Top commands
+1. git diff     42
+2. rg           31
+3. cargo test   12
+
+Live graph  (last 7 min)
+tokens saved/min: ▁▃▅▇▆▄▂
+latency ms      : ▂▂▃▅▄▂▂
+
+refreshing every 1s  •  ctrl-c to exit
+```
+
+### 4) Use CTK commands directly when needed
 
 ```bash
 ctk proxy -- git diff
@@ -62,6 +87,7 @@ ctk explain -- cargo test
 - `test`: signal-only test output (fail/error/panic)
 - `err`: signal-only error/warning output
 - `chunk`: fetch stored auto-chunks by id/index
+- `monitor`: view live token-saving stats and top commands
 - `init --codex/--claude`: install AI CLI integration (AI-CLI-only)
 - `doctor --codex/--claude`: inspect integration state
 - `uninstall --codex/--claude`: remove integration
@@ -205,6 +231,73 @@ After:
 Traceback (most recent call last):
 ValueError: bad value
 at src/main.rs:10
+```
+
+### Grep-like Output
+
+Before:
+
+```text
+src/main.rs:42:fn main() {
+src/lib.rs:10:pub mod engine;
+src/main.rs:42:fn main() {
+src/engine.rs:5:use anyhow;
+```
+
+After (sorted, duplicates collapsed):
+
+```text
+src/engine.rs:5:use anyhow;
+src/lib.rs:10:pub mod engine;
+src/main.rs:42:fn main() {  [x2]
+```
+
+### Table Text
+
+Before:
+
+```text
+| Name  | Status | Count |
+|-------|--------|-------|
+| alpha | ok     | 10    |
+| alpha | ok     | 10    |
+| gamma | down   | 0     |
+```
+
+After (duplicate rows collapsed):
+
+```text
+| Name  | Status | Count |
+|-------|--------|-------|
+| alpha | ok     | 10    |  [x2]
+| gamma | down   | 0     |
+```
+
+### Test Output
+
+Before:
+
+```text
+running 3 tests
+test engine::tests::golden_json ... ok
+test engine::tests::golden_diff ... ok
+test engine::tests::golden_log ... FAILED
+
+failures:
+
+---- engine::tests::golden_log stdout ----
+thread 'main' panicked: assertion `left == right` failed
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored
+```
+
+After (signal lines only — fail/error/panic):
+
+```text
+test engine::tests::golden_log ... FAILED
+failures:
+thread 'main' panicked: assertion `left == right` failed
+test result: FAILED. 2 passed; 1 failed; 0 ignored
 ```
 
 These examples are covered by golden tests in `tests/golden/*.input.txt` and
@@ -454,6 +547,27 @@ Notes:
 
 - If Python `tiktoken` is installed, the script uses it.
 - Otherwise it falls back to `chars/4` estimation.
+
+## Live Monitoring
+
+When `ctk` is active (via `ctk init`), you can monitor token savings in real-time:
+
+```bash
+# In a separate terminal
+ctk monitor
+```
+
+This shows:
+- **Active AI CLI**: Which CLI is currently using `ctk` (codex/claude)
+- **Commands/min**: Throughput of compacted commands
+- **Saved tokens**: Total tokens eliminated via compaction
+- **Savings ratio**: Percentage of tokens saved compared to raw output
+- **Fallbacks**: Commands that fell back to raw output (should be rare)
+- **Chunks created**: Auto-chunked outputs (when output exceeds limit)
+- **Top commands**: Most frequently compacted commands with counts
+- **Live graphs**: Token savings and latency over the last 7 minutes
+
+Stats are persisted to `~/.ctk/stats.json` and updated after each pipeline run.
 
 ## Environment Variables
 

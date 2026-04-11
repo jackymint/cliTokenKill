@@ -340,7 +340,7 @@ fn create_launcher(
     let launcher_path = layout.launchers_dir.join(launcher_file);
 
     let script = format!(
-        "#!/usr/bin/env bash\nset -euo pipefail\ndepth=\"${{{LAUNCH_DEPTH_ENV}:-0}}\"\nif (( depth >= {MAX_LAUNCH_DEPTH} )); then\n  echo \"ctk: launcher recursion guard triggered ({agent_cmd})\" >&2\n  exit 125\nfi\nexport {LAUNCH_DEPTH_ENV}=\"$((depth + 1))\"\nexport {AI_ENV_FLAG}=1\nexport PATH=\"{}:$PATH\"\nexec \"{}\" \"$@\"\n",
+        "#!/usr/bin/env bash\nset -euo pipefail\ndepth=\"${{{LAUNCH_DEPTH_ENV}:-0}}\"\nif (( depth >= {MAX_LAUNCH_DEPTH} )); then\n  echo \"ctk: launcher recursion guard triggered ({agent_cmd})\" >&2\n  exit 125\nfi\nexport {LAUNCH_DEPTH_ENV}=\"$((depth + 1))\"\nexport {AI_ENV_FLAG}=1\nexport CTK_AI_CLI_NAME={agent_cmd}\nexport PATH=\"{}:$PATH\"\nexec \"{}\" \"$@\"\n",
         layout.bin_dir.display(),
         real_agent.display(),
     );
@@ -523,25 +523,25 @@ fn detect_in_login_shell_path(bin_dir: &Path) -> Option<bool> {
     let path = run_login_shell_capture("printf %s \"$PATH\"")?;
     let target = bin_dir.display().to_string();
     let parts: Vec<&str> = path.split(':').collect();
-    Some(parts.iter().any(|p| *p == target.as_str()))
+    Some(parts.contains(&target.as_str()))
 }
 
 fn resolve_all_command_matches(command: &str) -> Vec<String> {
-    if let Ok(output) = Command::new("which").args(["-a", command]).output() {
-        if output.status.success() {
-            let mut entries = Vec::new();
-            for line in String::from_utf8_lossy(&output.stdout).lines() {
-                let trimmed = line.trim();
-                if trimmed.is_empty() {
-                    continue;
-                }
-                if !entries.iter().any(|v| v == trimmed) {
-                    entries.push(trimmed.to_string());
-                }
+    if let Ok(output) = Command::new("which").args(["-a", command]).output()
+        && output.status.success()
+    {
+        let mut entries = Vec::new();
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
             }
-            if !entries.is_empty() {
-                return entries;
+            if !entries.iter().any(|v| v == trimmed) {
+                entries.push(trimmed.to_string());
             }
+        }
+        if !entries.is_empty() {
+            return entries;
         }
     }
 
@@ -698,4 +698,201 @@ fn set_executable(_path: &Path) -> Result<()> {
 #[cfg(not(unix))]
 fn is_executable(path: &Path) -> bool {
     path.is_file()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    // ── pure functions ────────────────────────────────────────────────────────
+
+    #[test]
+    fn shell_quote_plain_string() {
+        assert_eq!(shell_quote_single("codex"), "'codex'");
+    }
+
+    #[test]
+    fn shell_quote_empty_string() {
+        assert_eq!(shell_quote_single(""), "''");
+    }
+
+    #[test]
+    fn shell_quote_escapes_single_quotes() {
+        assert_eq!(shell_quote_single("it's"), "'it'\"'\"'s'");
+    }
+
+    #[test]
+    fn is_truthy_env_recognises_truthy_values() {
+        for v in &["1", "true", "yes", "on", "TRUE", "YES", "  on  "] {
+            assert!(is_truthy_env(v), "{v} should be truthy");
+        }
+    }
+
+    #[test]
+    fn is_truthy_env_rejects_falsy_values() {
+        for v in &["0", "false", "no", "off", "", "random"] {
+            assert!(!is_truthy_env(v), "{v} should not be truthy");
+        }
+    }
+
+    #[test]
+    fn launcher_target_name_strips_ctk_suffix() {
+        assert_eq!(launcher_target_name("codex-ctk"), "codex");
+        assert_eq!(launcher_target_name("claude-ctk"), "claude");
+    }
+
+    #[test]
+    fn launcher_target_name_unchanged_without_suffix() {
+        assert_eq!(launcher_target_name("codex"), "codex");
+    }
+
+    // ── rc file block manipulation ─────────────────────────────────────────────
+
+    fn temp_file(content: &str) -> PathBuf {
+        let id = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let path = std::env::temp_dir().join(format!("ctk_rc_{id}.txt"));
+        fs::write(&path, content).unwrap();
+        path
+    }
+
+    #[test]
+    fn upsert_block_inserts_into_empty_file() {
+        let path = temp_file("");
+        let changed = upsert_block(&path, "# S", "# E", "# S\nline\n# E\n").unwrap();
+        assert!(changed);
+        assert!(fs::read_to_string(&path).unwrap().contains("line"));
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn upsert_block_replaces_existing_block() {
+        let path = temp_file("before\n# S\nold\n# E\nafter\n");
+        upsert_block(&path, "# S", "# E", "# S\nnew\n# E\n").unwrap();
+        let content = fs::read_to_string(&path).unwrap();
+        assert!(content.contains("new") && !content.contains("old"));
+        assert!(content.contains("before") && content.contains("after"));
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn upsert_block_noop_when_content_unchanged() {
+        let block = "# S\nline\n# E\n";
+        let path = temp_file(block);
+        let changed = upsert_block(&path, "# S", "# E", block).unwrap();
+        assert!(!changed);
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn remove_block_removes_existing_block() {
+        let path = temp_file("before\n# S\nline\n# E\nafter\n");
+        let changed = remove_block(&path, "# S", "# E").unwrap();
+        assert!(changed);
+        let content = fs::read_to_string(&path).unwrap();
+        assert!(!content.contains("line") && content.contains("before"));
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn remove_block_noop_when_absent() {
+        let path = temp_file("no block here\n");
+        assert!(!remove_block(&path, "# S", "# E").unwrap());
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn remove_block_noop_on_missing_file() {
+        let path = PathBuf::from("/tmp/ctk_nonexistent_xyzzy.txt");
+        assert!(!remove_block(&path, "# S", "# E").unwrap());
+    }
+
+    // ── launcher_exec_target ───────────────────────────────────────────────────
+
+    #[test]
+    fn launcher_exec_target_extracts_path() {
+        let path = temp_file("#!/usr/bin/env bash\nexec \"/usr/local/bin/codex\" \"$@\"\n");
+        assert_eq!(
+            launcher_exec_target(&path).unwrap(),
+            PathBuf::from("/usr/local/bin/codex")
+        );
+        fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn launcher_exec_target_returns_none_without_exec_line() {
+        let path = temp_file("#!/usr/bin/env bash\necho hello\n");
+        assert!(launcher_exec_target(&path).is_none());
+        fs::remove_file(&path).ok();
+    }
+
+    // ── init / uninstall roundtrip ─────────────────────────────────────────────
+
+    static HOME_LOCK: Mutex<()> = Mutex::new(());
+
+    fn with_temp_home<F: FnOnce(&Path) -> R, R>(f: F) -> R {
+        let _guard = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let id = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let tmp = std::env::temp_dir().join(format!("ctk_home_{id}"));
+        fs::create_dir_all(&tmp).unwrap();
+        let old_home = env::var_os("HOME");
+        // SAFETY: protected by HOME_LOCK; no other threads touch HOME concurrently
+        unsafe { env::set_var("HOME", &tmp) };
+        let result = f(&tmp);
+        unsafe {
+            match old_home {
+                Some(h) => env::set_var("HOME", h),
+                None => env::remove_var("HOME"),
+            }
+        }
+        fs::remove_dir_all(&tmp).ok();
+        result
+    }
+
+    #[test]
+    fn init_creates_bin_dir() {
+        with_temp_home(|home| {
+            init_agent("codex", "codex-ctk").unwrap();
+            assert!(home.join(".ctk/bin").is_dir());
+        });
+    }
+
+    #[test]
+    fn init_places_ctk_in_bin() {
+        with_temp_home(|home| {
+            init_agent("codex", "codex-ctk").unwrap();
+            assert!(home.join(".ctk/bin/ctk").exists());
+        });
+    }
+
+    #[test]
+    fn init_result_reports_correct_bin_dir() {
+        with_temp_home(|home| {
+            let result = init_agent("codex", "codex-ctk").unwrap();
+            assert_eq!(result.bin_dir, home.join(".ctk/bin"));
+        });
+    }
+
+    #[test]
+    fn uninstall_after_init_removes_bin_dir() {
+        with_temp_home(|home| {
+            init_agent("codex", "codex-ctk").unwrap();
+            assert!(home.join(".ctk/bin").exists());
+            uninstall_agent("codex-ctk").unwrap();
+            assert!(!home.join(".ctk/bin").exists());
+        });
+    }
+
+    #[test]
+    fn uninstall_on_clean_home_does_not_err() {
+        with_temp_home(|_| {
+            assert!(uninstall_agent("codex-ctk").is_ok());
+        });
+    }
 }
