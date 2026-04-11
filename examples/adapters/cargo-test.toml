@@ -1,0 +1,19 @@
+[[adapter]]
+name = "corp-cargo-test"
+match_command = "^cargo test"
+priority = 50
+signal_patterns = ["failed", "panic", "error:"]
+exclude_patterns = ["^note:"]
+level = "minimal"
+max_lines = 80
+max_chars_per_line = 220
+on_empty = "ok: no failures"
+
+[[adapter]]
+name = "corp-npm-test"
+match_command = "^npm test"
+priority = 40
+signal_patterns = ["FAIL", "Error", "failed"]
+exclude_patterns = ["^\\s*at "]
+max_lines = 100
+on_empty = "ok: no test failures"

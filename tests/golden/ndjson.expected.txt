@@ -1,0 +1,2 @@
+{"level":"info","msg":"start"}
+{"level":"error","msg":"boom"}  [x2]

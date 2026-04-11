@@ -1,0 +1,3 @@
+{"level":"info","msg":"start"}
+{"level":"error","msg":"boom"}
+{"level":"error","msg":"boom"}

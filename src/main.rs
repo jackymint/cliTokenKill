@@ -1,15 +1,20 @@
 mod core;
+mod debug;
 mod engine;
 mod integration;
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use core::budget::apply_token_budget;
 use core::chunk::{ChunkedText, maybe_auto_chunk, read_chunk};
 use core::filter::{FilterConfig, FilterLevel};
 use core::pipeline::{PipelineMode, run_pipeline};
+use debug::explain::{explain_command, explain_file};
 use engine::{classify_content, compact_by_kind};
-use integration::codex::{doctor_codex, init_codex, uninstall_codex};
+use integration::codex::{
+    DoctorResult, InitResult, UninstallResult, doctor_claude, doctor_codex, init_claude,
+    init_codex, uninstall_claude, uninstall_codex,
+};
 use std::fs;
 use std::path::PathBuf;
 
@@ -70,6 +75,30 @@ enum Commands {
         #[arg(long, default_value_t = 240)]
         max_chars_per_line: usize,
     },
+    /// Explain which classifier/filter/budget behavior was applied
+    Explain {
+        #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+        #[arg(short, long, default_value = "minimal")]
+        level: FilterLevel,
+        #[arg(short, long, default_value_t = 120)]
+        max_lines: usize,
+        #[arg(long, default_value_t = 240)]
+        max_chars_per_line: usize,
+        /// Explain pipeline mode
+        #[arg(long, default_value = "normal")]
+        mode: ExplainMode,
+    },
+    /// Explain classification/compaction for a file input
+    ExplainFile {
+        file: PathBuf,
+        #[arg(short, long, default_value = "minimal")]
+        level: FilterLevel,
+        #[arg(short, long, default_value_t = 120)]
+        max_lines: usize,
+        #[arg(long, default_value_t = 240)]
+        max_chars_per_line: usize,
+    },
     /// Run any command and output only error/warning lines
     Err {
         #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
@@ -79,23 +108,32 @@ enum Commands {
         #[arg(long, default_value_t = 240)]
         max_chars_per_line: usize,
     },
-    /// Install shell wrappers and PATH updates for Codex CLI
+    /// Install shell wrappers and launchers for AI CLI integrations
     Init {
         /// Install integration for Codex CLI
         #[arg(long)]
         codex: bool,
+        /// Install integration for Claude CLI
+        #[arg(long)]
+        claude: bool,
     },
-    /// Uninstall shell wrappers and PATH updates for Codex CLI
+    /// Uninstall shell wrappers and launchers for AI CLI integrations
     Uninstall {
         /// Uninstall integration for Codex CLI
         #[arg(long)]
         codex: bool,
+        /// Uninstall integration for Claude CLI
+        #[arg(long)]
+        claude: bool,
     },
     /// Show integration status diagnostics
     Doctor {
         /// Show diagnostics for Codex integration
         #[arg(long)]
         codex: bool,
+        /// Show diagnostics for Claude integration
+        #[arg(long)]
+        claude: bool,
         /// Attempt to auto-repair integration before reporting status
         #[arg(long)]
         fix: bool,
@@ -112,6 +150,13 @@ enum Commands {
 enum GitCommands {
     Status,
     Diff,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+enum ExplainMode {
+    Normal,
+    Test,
+    Err,
 }
 
 fn main() {
@@ -172,15 +217,32 @@ fn handle_command(command: Commands) -> Result<()> {
             filter_config(FilterLevel::Aggressive, max_lines, max_chars_per_line),
             PipelineMode::ErrorOnly,
         )?,
-        Commands::Init { codex } => {
-            handle_init(codex)?;
+        Commands::Explain {
+            command,
+            level,
+            max_lines,
+            max_chars_per_line,
+            mode,
+        } => explain_command(
+            &command,
+            filter_config(level, max_lines, max_chars_per_line),
+            pipeline_mode_from_explain(mode),
+        )?,
+        Commands::ExplainFile {
+            file,
+            level,
+            max_lines,
+            max_chars_per_line,
+        } => explain_file(&file, filter_config(level, max_lines, max_chars_per_line))?,
+        Commands::Init { codex, claude } => {
+            handle_init(codex, claude)?;
         }
         Commands::Chunk { id, index } => handle_chunk(&id, index)?,
-        Commands::Uninstall { codex } => {
-            handle_uninstall(codex)?;
+        Commands::Uninstall { codex, claude } => {
+            handle_uninstall(codex, claude)?;
         }
-        Commands::Doctor { codex, fix } => {
-            handle_doctor(codex, fix)?;
+        Commands::Doctor { codex, claude, fix } => {
+            handle_doctor(codex, claude, fix)?;
         }
     }
     Ok(())
@@ -196,51 +258,41 @@ fn handle_read(file: PathBuf, config: FilterConfig) -> Result<()> {
     Ok(())
 }
 
-fn handle_init(codex: bool) -> Result<()> {
-    require_codex(codex, "init")?;
-    let result = init_codex()?;
-    println!("ctk codex integration installed");
-    println!("mode: ai-cli-only");
-    println!("wrapper dir: {}", result.bin_dir.display());
-    print_wrappers_summary(&result.wrappers_installed);
-    if let Some(launcher) = result.launcher_path {
-        println!("launcher: {}", launcher.display());
-        println!("use: {} <args>", launcher.display());
-    } else {
-        println!("launcher: codex not found in PATH");
+fn handle_init(codex: bool, claude: bool) -> Result<()> {
+    require_target_selected(codex, claude, "init")?;
+    if codex {
+        let result = init_codex()?;
+        print_init_result("codex", &result);
     }
-    print_rc_update_summary(&result.rc_files_updated, "already clean");
-    println!("next: run Codex via launcher");
+    if claude {
+        let result = init_claude()?;
+        print_init_result("claude", &result);
+    }
     Ok(())
 }
 
-fn handle_uninstall(codex: bool) -> Result<()> {
-    require_codex(codex, "uninstall")?;
-    let result = uninstall_codex()?;
-    println!("ctk codex integration removed");
-    println!("wrapper files removed: {}", result.removed_wrapper_files);
-    println!("wrapper dir removed: {}", result.removed_dir);
-    print_rc_update_summary(&result.rc_files_updated, "no changes");
-    println!("next: open a new terminal/Codex session");
+fn handle_uninstall(codex: bool, claude: bool) -> Result<()> {
+    require_target_selected(codex, claude, "uninstall")?;
+    if codex {
+        let result = uninstall_codex()?;
+        print_uninstall_result("codex", &result);
+    }
+    if claude {
+        let result = uninstall_claude()?;
+        print_uninstall_result("claude", &result);
+    }
     Ok(())
 }
 
-fn handle_doctor(codex: bool, fix: bool) -> Result<()> {
-    require_codex(codex, "doctor")?;
-    let d = doctor_codex(fix)?;
-    println!("ctk doctor (codex)");
-    println!("repaired: {}", d.repaired);
-    println!("ctk wrapper dir in PATH: {}", d.ctk_in_path);
-    if let Some(v) = d.ctk_in_login_shell_path {
-        println!("ctk wrapper dir in login shell PATH: {v}");
-    } else {
-        println!("ctk wrapper dir in login shell PATH: unknown");
+fn handle_doctor(codex: bool, claude: bool, fix: bool) -> Result<()> {
+    require_target_selected(codex, claude, "doctor")?;
+    if codex {
+        let d = doctor_codex(fix)?;
+        print_doctor_result("codex", &d);
     }
-    println!("launcher exists: {}", d.launcher_exists);
-    println!("wrappers count: {}", d.wrappers_count);
-    println!("PATH head:");
-    for p in d.path_head {
-        println!(" - {p}");
+    if claude {
+        let d = doctor_claude(fix)?;
+        print_doctor_result("claude", &d);
     }
     Ok(())
 }
@@ -259,6 +311,14 @@ fn git_args(command: GitCommands) -> Vec<String> {
     }
 }
 
+fn pipeline_mode_from_explain(mode: ExplainMode) -> PipelineMode {
+    match mode {
+        ExplainMode::Normal => PipelineMode::Normal,
+        ExplainMode::Test => PipelineMode::TestOnly,
+        ExplainMode::Err => PipelineMode::ErrorOnly,
+    }
+}
+
 fn filter_config(level: FilterLevel, max_lines: usize, max_chars_per_line: usize) -> FilterConfig {
     FilterConfig {
         level,
@@ -267,12 +327,52 @@ fn filter_config(level: FilterLevel, max_lines: usize, max_chars_per_line: usize
     }
 }
 
-fn require_codex(codex: bool, verb: &str) -> Result<()> {
-    if codex {
+fn require_target_selected(codex: bool, claude: bool, verb: &str) -> Result<()> {
+    if codex || claude {
         return Ok(());
     }
-    eprintln!("ctk: no target selected. try: ctk {verb} --codex");
+    eprintln!("ctk: no target selected. try: ctk {verb} --codex and/or --claude");
     std::process::exit(1);
+}
+
+fn print_init_result(target: &str, result: &InitResult) {
+    println!("ctk {target} integration installed");
+    println!("mode: ai-cli-only");
+    println!("wrapper dir: {}", result.bin_dir.display());
+    print_wrappers_summary(&result.wrappers_installed);
+    if let Some(launcher) = &result.launcher_path {
+        println!("launcher: {}", launcher.display());
+        println!("use: {} <args>", launcher.display());
+    } else {
+        println!("launcher: {target} not found in PATH");
+    }
+    print_rc_update_summary(&result.rc_files_updated, "already clean");
+    println!("next: run {target} via launcher");
+}
+
+fn print_uninstall_result(target: &str, result: &UninstallResult) {
+    println!("ctk {target} integration removed");
+    println!("wrapper files removed: {}", result.removed_wrapper_files);
+    println!("wrapper dir removed: {}", result.removed_dir);
+    print_rc_update_summary(&result.rc_files_updated, "no changes");
+    println!("next: open a new terminal/{target} session");
+}
+
+fn print_doctor_result(target: &str, d: &DoctorResult) {
+    println!("ctk doctor ({target})");
+    println!("repaired: {}", d.repaired);
+    println!("ctk wrapper dir in PATH: {}", d.ctk_in_path);
+    if let Some(v) = d.ctk_in_login_shell_path {
+        println!("ctk wrapper dir in login shell PATH: {v}");
+    } else {
+        println!("ctk wrapper dir in login shell PATH: unknown");
+    }
+    println!("launcher exists: {}", d.launcher_exists);
+    println!("wrappers count: {}", d.wrappers_count);
+    println!("PATH head:");
+    for p in &d.path_head {
+        println!(" - {p}");
+    }
 }
 
 fn print_wrappers_summary(wrappers: &[String]) {
