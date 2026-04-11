@@ -26,7 +26,6 @@ import os
 
 payload = json.load(sys.stdin)
 cmd = payload.get("tool_input", {}).get("command", "").strip()
-working_dir = payload.get("tool_input", {}).get("working_directory", &quot;~/.ctk&quot;)
 
 # Don't block if already wrapped
 if cmd.startswith("ctk proxy"):
@@ -43,24 +42,13 @@ import os
 
 payload = json.load(sys.stdin)
 cmd = payload.get("tool_input", {}).get("command", "")
-working_dir = payload.get("tool_input", {}).get("working_directory", &quot;~/.ctk&quot;)
 tool_response = payload.get("tool_response", "")
-
-# Debug: log payload to see what we get
-import os
-debug_file = os.path.expanduser("~/.ctk/hook_debug.log")
-with open(debug_file, "a") as f:
-    f.write(f"PostToolUse: cmd={cmd}, working_dir={working_dir}\n")
 
 text = tool_response if isinstance(tool_response, str) else json.dumps(tool_response)
 too_big = len(text) > 12000
 
 if too_big and not cmd.startswith("ctk proxy"):
-    # Build ctk command with --path
-    if working_dir:
-        ctk_cmd = f"ctk proxy --path {working_dir} -- {cmd}"
-    else:
-        ctk_cmd = f"ctk proxy -- {cmd}"
+    ctk_cmd = f"ctk proxy --path ~/.ctk -- {cmd}"
     
     print(json.dumps({
         "decision": "block",
