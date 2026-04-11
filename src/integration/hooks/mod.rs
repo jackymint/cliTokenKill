@@ -11,7 +11,8 @@ print(json.dumps({
         "additionalContext": (
             "For Bash commands that may produce large output, prefer running them via "
             "'ctk proxy -- <command>' so output is compacted before being returned. "
-            "Examples: 'ctk proxy -- git diff', 'ctk proxy -- rg ERROR .', "
+            "If the command runs in a specific directory, use 'ctk proxy --path <dir> -- <command>'. "
+            "Examples: 'ctk proxy -- git diff', 'ctk proxy --path ~/project -- rg ERROR .', "
             "'ctk proxy -- cargo test'."
         )
     }
@@ -22,9 +23,11 @@ const PRE_BASH_PY: &str = r#"#!/usr/bin/env python3
 import json
 import sys
 import re
+import os
 
 payload = json.load(sys.stdin)
 cmd = payload.get("tool_input", {}).get("command", "").strip()
+working_dir = payload.get("tool_input", {}).get("working_directory", "")
 
 targets = [
     r"^git\s+diff\b",
@@ -40,19 +43,25 @@ targets = [
 ]
 
 needs_ctk = any(re.search(p, cmd) for p in targets)
-already_wrapped = cmd.startswith("ctk proxy -- ")
+already_wrapped = cmd.startswith("ctk proxy")
 
 if needs_ctk and not already_wrapped:
+    # Build ctk command with --path
+    if working_dir:
+        ctk_cmd = f"ctk proxy --path {working_dir} -- {cmd}"
+    else:
+        ctk_cmd = f"ctk proxy -- {cmd}"
+    
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
             "permissionDecisionReason": (
-                f"Run this through CTK instead: ctk proxy -- {cmd}"
+                f"Run this through CTK instead: {ctk_cmd}"
             )
         },
         "systemMessage": (
-            f"Large-output Bash command blocked. Re-run via: ctk proxy -- {cmd}"
+            f"Large-output Bash command blocked. Re-run via: {ctk_cmd}"
         )
     }))
     sys.exit(0)
@@ -66,20 +75,26 @@ import sys
 
 payload = json.load(sys.stdin)
 cmd = payload.get("tool_input", {}).get("command", "")
+working_dir = payload.get("tool_input", {}).get("working_directory", "")
 tool_response = payload.get("tool_response", "")
 
 text = tool_response if isinstance(tool_response, str) else json.dumps(tool_response)
 too_big = len(text) > 12000
 
-if too_big and not cmd.startswith("ctk proxy -- "):
+if too_big and not cmd.startswith("ctk proxy"):
+    # Build ctk command with --path
+    if working_dir:
+        ctk_cmd = f"ctk proxy --path {working_dir} -- {cmd}"
+    else:
+        ctk_cmd = f"ctk proxy -- {cmd}"
+    
     print(json.dumps({
         "decision": "block",
         "reason": "The Bash output was large. Prefer rerunning via CTK.",
         "hookSpecificOutput": {
             "hookEventName": "PostToolUse",
             "additionalContext": (
-                f"The previous Bash output was large. Prefer rerunning with: "
-                f"ctk proxy -- {cmd}"
+                f"The previous Bash output was large. Prefer rerunning with: {ctk_cmd}"
             )
         }
     }))
