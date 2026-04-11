@@ -159,8 +159,21 @@ pub fn install_hooks(home: &str) -> Result<Vec<PathBuf>> {
     fs::write(&hooks_json, config)?;
 
     let config_toml = codex_dir.join("config.toml");
-    if !config_toml.exists() {
-        fs::write(&config_toml, "[features]\ncodex_hooks = true\n")?;
+    let mut config_content = if config_toml.exists() {
+        fs::read_to_string(&config_toml)?
+    } else {
+        String::new()
+    };
+    
+    if !config_content.contains("codex_hooks") {
+        if !config_content.contains("[features]") {
+            config_content.push_str("\n[features]\n");
+        }
+        if !config_content.contains("codex_hooks = true") {
+            let insert_pos = config_content.find("[features]").unwrap() + "[features]".len();
+            config_content.insert_str(insert_pos, "\ncodex_hooks = true");
+        }
+        fs::write(&config_toml, config_content)?;
     }
 
     Ok(vec![hooks_json, config_toml])
