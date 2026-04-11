@@ -380,7 +380,7 @@ else
   for _i in 1 2 3 4 5; do
     _name=$(ps -p "$_pid" -o comm= 2>/dev/null) || break
     case "$_name" in
-      codex|claude|gemini) _ctk_active=1; break ;;
+      codex|claude|gemini|*"Amazon Q"*|*amazonq*) _ctk_active=1; break ;;
     esac
     _pid=$(ps -p "$_pid" -o ppid= 2>/dev/null | tr -d ' ') || break
     [[ "${{_pid:-1}}" -le 1 ]] && break
