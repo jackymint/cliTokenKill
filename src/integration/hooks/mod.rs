@@ -30,7 +30,18 @@ cmd = payload.get("tool_input", {}).get("command", "").strip()
 if cmd.startswith("ctk proxy"):
     sys.exit(0)
 
-# Let all commands through - we'll catch large output in PostToolUse
+# Block and require ctk proxy for all commands
+ctk_cmd = f"ctk proxy -- {cmd}"
+print(json.dumps({
+    "decision": "block",
+    "reason": "All Bash commands must use CTK proxy for output compaction.",
+    "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "additionalContext": (
+            f"Please run this command via CTK: {ctk_cmd}"
+        )
+    }
+}))
 sys.exit(0)
 "#;
 
