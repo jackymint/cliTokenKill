@@ -41,6 +41,9 @@ enum Commands {
         /// Command to run
         #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,
+        /// Working directory for command execution
+        #[arg(short, long)]
+        path: Option<PathBuf>,
         /// Filtering level
         #[arg(short, long, default_value = "minimal")]
         level: FilterLevel,
@@ -183,11 +186,13 @@ fn handle_command(command: Commands) -> Result<()> {
     match command {
         Commands::Proxy {
             command,
+            path,
             level,
             max_lines,
             max_chars_per_line,
         } => run_and_exit(
             &command,
+            path,
             filter_config(level, max_lines, max_chars_per_line),
             PipelineMode::Normal,
         )?,
@@ -204,6 +209,7 @@ fn handle_command(command: Commands) -> Result<()> {
             max_chars_per_line,
         } => run_and_exit(
             &git_args(command),
+            None,
             filter_config(level, max_lines, max_chars_per_line),
             PipelineMode::Normal,
         )?,
@@ -213,6 +219,7 @@ fn handle_command(command: Commands) -> Result<()> {
             max_chars_per_line,
         } => run_and_exit(
             &command,
+            None,
             filter_config(FilterLevel::Minimal, max_lines, max_chars_per_line),
             PipelineMode::TestOnly,
         )?,
@@ -222,6 +229,7 @@ fn handle_command(command: Commands) -> Result<()> {
             max_chars_per_line,
         } => run_and_exit(
             &command,
+            None,
             filter_config(FilterLevel::Aggressive, max_lines, max_chars_per_line),
             PipelineMode::ErrorOnly,
         )?,
@@ -344,7 +352,12 @@ fn require_target_selected(codex: bool, claude: bool, verb: &str) -> Result<()> 
     std::process::exit(1);
 }
 
-fn run_and_exit(command: &[String], config: FilterConfig, mode: PipelineMode) -> Result<()> {
+fn run_and_exit(command: &[String], path: Option<PathBuf>, config: FilterConfig, mode: PipelineMode) -> Result<()> {
+    if let Some(dir) = path {
+        std::env::set_current_dir(&dir)
+            .with_context(|| format!("failed to change directory to {}", dir.display()))?;
+    }
+    
     let start = Instant::now();
     let result = run_pipeline(command, config, mode)?;
     let latency_ms = start.elapsed().as_millis() as u64;
