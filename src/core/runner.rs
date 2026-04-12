@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 #[derive(Debug)]
 pub struct CmdOutput {
@@ -17,6 +17,7 @@ pub fn run_command(args: &[String]) -> Result<CmdOutput> {
     if args.len() > 1 {
         cmd.args(&args[1..]);
     }
+    cmd.stdin(Stdio::inherit());
 
     let output = cmd.output().with_context(|| {
         format!(
