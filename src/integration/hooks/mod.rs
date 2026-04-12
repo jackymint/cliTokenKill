@@ -9,7 +9,10 @@ print(json.dumps({
     "hookSpecificOutput": {
         "hookEventName": "SessionStart",
         "additionalContext": (
-            "CTK (cliTokenKill) is active. Command output will be automatically compacted."
+            "For Bash commands that may produce large output, run them via "
+            "'ctk proxy -- <command>' to compact output before returning. "
+            "Examples: 'ctk proxy -- git diff', 'ctk proxy -- rg ERROR .', "
+            "'ctk proxy -- cargo test'."
         )
     }
 }))
@@ -19,21 +22,52 @@ const PRE_BASH_PY: &str = r#"#!/usr/bin/env python3
 import json
 import sys
 
-# Let all commands through - wrapper will handle compaction
+payload = json.load(sys.stdin)
+cmd = payload.get("tool_input", {}).get("command", "").strip()
+
+# Don't block if already wrapped or is ctk command
+if cmd.startswith("ctk"):
+    sys.exit(0)
+
+# Block and require ctk proxy for all other commands
+ctk_cmd = f"ctk proxy -- {cmd}"
+print(json.dumps({
+    "decision": "block",
+    "reason": f"Please run via CTK: {ctk_cmd}"
+}))
 sys.exit(0)
 "#;
 
 const POST_BASH_PY: &str = r#"#!/usr/bin/env python3
+import json
 import sys
 
-# Let all commands through - wrapper handles compaction
+payload = json.load(sys.stdin)
+cmd = payload.get("tool_input", {}).get("command", "")
+tool_response = payload.get("tool_response", "")
+
+text = tool_response if isinstance(tool_response, str) else json.dumps(tool_response)
+too_big = len(text) > 12000
+
+if too_big and not cmd.startswith("ctk proxy"):
+    ctk_cmd = f"ctk proxy -- {cmd}"
+    print(json.dumps({
+        "decision": "block",
+        "reason": "Output was large. Please rerun via CTK.",
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": f"Rerun with: {ctk_cmd}"
+        }
+    }))
+    sys.exit(0)
+
 sys.exit(0)
 "#;
 
 pub fn install_hooks(home: &str) -> Result<Vec<PathBuf>> {
     let codex_dir = PathBuf::from(home).join(".codex");
     let hooks_dir = codex_dir.join("hooks");
-    
+
     fs::create_dir_all(&hooks_dir)
         .with_context(|| format!("failed to create {}", hooks_dir.display()))?;
 
@@ -56,7 +90,8 @@ pub fn install_hooks(home: &str) -> Result<Vec<PathBuf>> {
     }
 
     let hooks_json = codex_dir.join("hooks.json");
-    let config = format!(r#"{{
+    let config = format!(
+        r#"{{
   "hooks": {{
     "SessionStart": [
       {{
@@ -96,7 +131,11 @@ pub fn install_hooks(home: &str) -> Result<Vec<PathBuf>> {
     ]
   }}
 }}
-"#, hooks_dir.display(), hooks_dir.display(), hooks_dir.display());
+"#,
+        hooks_dir.display(),
+        hooks_dir.display(),
+        hooks_dir.display()
+    );
 
     fs::write(&hooks_json, config)?;
 
@@ -106,7 +145,7 @@ pub fn install_hooks(home: &str) -> Result<Vec<PathBuf>> {
     } else {
         String::new()
     };
-    
+
     if !config_content.contains("codex_hooks") {
         if !config_content.contains("[features]") {
             config_content.push_str("\n[features]\n");
@@ -124,9 +163,13 @@ pub fn install_hooks(home: &str) -> Result<Vec<PathBuf>> {
 pub fn uninstall_hooks(home: &str) -> Result<()> {
     let codex_dir = PathBuf::from(home).join(".codex");
     let hooks_dir = codex_dir.join("hooks");
-    
+
     if hooks_dir.exists() {
-        for file in ["ctk_session_start.py", "ctk_pre_bash.py", "ctk_post_bash.py"] {
+        for file in [
+            "ctk_session_start.py",
+            "ctk_pre_bash.py",
+            "ctk_post_bash.py",
+        ] {
             let path = hooks_dir.join(file);
             if path.exists() {
                 fs::remove_file(path)?;

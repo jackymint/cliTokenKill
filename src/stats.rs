@@ -3,11 +3,16 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::ErrorKind;
 use std::path::PathBuf;
+use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const MAX_EVENTS: usize = 120;
 const GRAPH_WINDOW_MS: u64 = 7 * 60 * 1000;
+const STATS_LOCK_RETRY_MS: u64 = 10;
+const STATS_LOCK_TIMEOUT_MS: u64 = 2_000;
 
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Stats {
@@ -44,8 +49,33 @@ impl Stats {
                 .with_context(|| format!("failed to create stats dir: {}", parent.display()))?;
         }
         let json = serde_json::to_string(self).context("failed to serialize stats")?;
-        fs::write(&path, json)
+        let tmp = path.with_extension(format!("json.tmp-{}", std::process::id()));
+        fs::write(&tmp, json)
+            .with_context(|| format!("failed to write temp stats: {}", tmp.display()))?;
+        fs::rename(&tmp, &path)
             .with_context(|| format!("failed to write stats: {}", path.display()))
+    }
+
+    pub fn record_and_save(
+        command: &str,
+        raw_chars: usize,
+        filtered_chars: usize,
+        latency_ms: u64,
+        fallback: bool,
+        new_chunks: u64,
+    ) -> Result<Self> {
+        let _lock = StatsLock::acquire()?;
+        let mut stats = Self::load();
+        stats.record(
+            command,
+            raw_chars,
+            filtered_chars,
+            latency_ms,
+            fallback,
+            new_chunks,
+        );
+        stats.save()?;
+        Ok(stats)
     }
 
     pub fn record(
@@ -127,6 +157,43 @@ impl Stats {
     }
 }
 
+struct StatsLock {
+    path: PathBuf,
+}
+
+impl StatsLock {
+    fn acquire() -> Result<Self> {
+        let path = lock_path();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("failed to create stats dir: {}", parent.display()))?;
+        }
+        let start = now_ms();
+        loop {
+            match OpenOptions::new().write(true).create_new(true).open(&path) {
+                Ok(_) => return Ok(Self { path }),
+                Err(err) if err.kind() == ErrorKind::AlreadyExists => {
+                    if now_ms().saturating_sub(start) >= STATS_LOCK_TIMEOUT_MS {
+                        anyhow::bail!("timed out waiting for stats lock: {}", path.display());
+                    }
+                    thread::sleep(std::time::Duration::from_millis(STATS_LOCK_RETRY_MS));
+                }
+                Err(err) => {
+                    return Err(err).with_context(|| {
+                        format!("failed to acquire stats lock: {}", path.display())
+                    });
+                }
+            }
+        }
+    }
+}
+
+impl Drop for StatsLock {
+    fn drop(&mut self) {
+        fs::remove_file(&self.path).ok();
+    }
+}
+
 fn bucket_sum<F>(events: &[StatEvent], buckets: usize, value: F) -> Vec<u64>
 where
     F: Fn(&StatEvent) -> u64,
@@ -179,4 +246,73 @@ pub(crate) fn stats_path() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".ctk/stats.json")
+}
+
+fn lock_path() -> PathBuf {
+    stats_path().with_extension("json.lock")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+    use std::sync::Mutex;
+
+    static HOME_LOCK: Mutex<()> = Mutex::new(());
+
+    fn with_temp_home<F: FnOnce(&Path) -> R, R>(f: F) -> R {
+        let _guard = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let tmp = std::env::temp_dir().join(format!("ctk_stats_home_{id}"));
+        fs::create_dir_all(&tmp).unwrap();
+        let old_home = env::var_os("HOME");
+        // SAFETY: protected by HOME_LOCK; no other tests mutate HOME concurrently.
+        unsafe { env::set_var("HOME", &tmp) };
+        let result = f(&tmp);
+        unsafe {
+            match old_home {
+                Some(h) => env::set_var("HOME", h),
+                None => env::remove_var("HOME"),
+            }
+        }
+        fs::remove_dir_all(&tmp).ok();
+        result
+    }
+
+    #[test]
+    fn record_and_save_persists_stats() {
+        with_temp_home(|_| {
+            let stats = Stats::record_and_save("echo", 20, 12, 5, false, 0).unwrap();
+            let saved = Stats::load();
+
+            assert_eq!(saved.total_commands, 1);
+            assert_eq!(saved.command_counts.get("echo"), Some(&1));
+            assert_eq!(saved.total_raw_tokens, stats.total_raw_tokens);
+            assert_eq!(saved.total_filtered_tokens, stats.total_filtered_tokens);
+        });
+    }
+
+    #[test]
+    fn record_and_save_is_process_safe() {
+        with_temp_home(|_| {
+            let mut threads = Vec::new();
+            for _ in 0..8 {
+                threads.push(thread::spawn(|| {
+                    for _ in 0..10 {
+                        Stats::record_and_save("echo", 20, 12, 5, false, 0).unwrap();
+                    }
+                }));
+            }
+            for handle in threads {
+                handle.join().unwrap();
+            }
+
+            let saved = Stats::load();
+            assert_eq!(saved.total_commands, 80);
+            assert_eq!(saved.command_counts.get("echo"), Some(&80));
+        });
+    }
 }
