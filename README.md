@@ -3,7 +3,7 @@
 `ctk` is a Rust CLI that reduces terminal output before it reaches an AI assistant context.
 It is designed for AI coding workflows where command output (logs, diffs, test output, large listings) can consume too many tokens.
 
-## Quick Start (1 Minute)
+## Quick Start
 
 ### 1) Install quickly
 
@@ -142,180 +142,21 @@ ctk chunk <chunk_id> 2
    - token budget gating
    - automatic chunking + chunk retrieval
 
-## Content-Aware Examples
+## Content-Aware Compaction
 
-The engine classifies output shape and applies a strategy per kind.
+The engine classifies output shape (`json`, `ndjson`, `diff`, `logs`, `stack traces`, `grep`, `tables`, `test output`) and applies a compact strategy per kind.
 
-### JSON
+**Examples:**
+- JSON: collapse long strings, remove whitespace
+- NDJSON: deduplicate identical lines
+- Diff: keep only changed lines
+- Logs: collapse repeated log lines
+- Stack traces: keep only error messages
+- Grep: sort and deduplicate matches
+- Tables: collapse duplicate rows
+- Test output: keep only failures/errors
 
-Before:
-
-```json
-{"status":"ok","trace":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
-```
-
-After:
-
-```json
-{
-  "status": "ok",
-  "trace": "<str:long>"
-}
-```
-
-### NDJSON
-
-Before:
-
-```text
-{"level":"info","msg":"start"}
-{"level":"error","msg":"boom"}
-{"level":"error","msg":"boom"}
-```
-
-After:
-
-```text
-{"level":"info","msg":"start"}
-{"level":"error","msg":"boom"}  [x2]
-```
-
-### Diff
-
-Before:
-
-```diff
-diff --git a/a.txt b/a.txt
-index 1111111..2222222 100644
---- a/a.txt
-+++ b/a.txt
-@@ -1,2 +1,2 @@
- unchanged line
--line old
-+line new
- context line
-```
-
-After:
-
-```diff
-diff --git a/a.txt b/a.txt
-index 1111111..2222222 100644
---- a/a.txt
-+++ b/a.txt
-@@ -1,2 +1,2 @@
--line old
-+line new
-```
-
-### Logs
-
-Before:
-
-```text
-2026-04-11 10:00:00 INFO boot
-2026-04-11 10:00:01 INFO boot
-2026-04-11 10:00:01 INFO boot
-2026-04-11 10:00:02 ERROR fail
-```
-
-After:
-
-```text
-2026-04-11 10:00:00 INFO boot
-2026-04-11 10:00:01 INFO boot  [x2]
-2026-04-11 10:00:02 ERROR fail
-```
-
-### Stack Trace
-
-Before:
-
-```text
-Traceback (most recent call last):
-  File "app.py", line 10, in <module>
-    run()
-ValueError: bad value
-at src/main.rs:10
-```
-
-After:
-
-```text
-Traceback (most recent call last):
-ValueError: bad value
-at src/main.rs:10
-```
-
-### Grep-like Output
-
-Before:
-
-```text
-src/main.rs:42:fn main() {
-src/lib.rs:10:pub mod engine;
-src/main.rs:42:fn main() {
-src/engine.rs:5:use anyhow;
-```
-
-After (sorted, duplicates collapsed):
-
-```text
-src/engine.rs:5:use anyhow;
-src/lib.rs:10:pub mod engine;
-src/main.rs:42:fn main() {  [x2]
-```
-
-### Table Text
-
-Before:
-
-```text
-| Name  | Status | Count |
-|-------|--------|-------|
-| alpha | ok     | 10    |
-| alpha | ok     | 10    |
-| gamma | down   | 0     |
-```
-
-After (duplicate rows collapsed):
-
-```text
-| Name  | Status | Count |
-|-------|--------|-------|
-| alpha | ok     | 10    |  [x2]
-| gamma | down   | 0     |
-```
-
-### Test Output
-
-Before:
-
-```text
-running 3 tests
-test engine::tests::golden_json ... ok
-test engine::tests::golden_diff ... ok
-test engine::tests::golden_log ... FAILED
-
-failures:
-
----- engine::tests::golden_log stdout ----
-thread 'main' panicked: assertion `left == right` failed
-
-test result: FAILED. 2 passed; 1 failed; 0 ignored
-```
-
-After (signal lines only — fail/error/panic):
-
-```text
-test engine::tests::golden_log ... FAILED
-failures:
-thread 'main' panicked: assertion `left == right` failed
-test result: FAILED. 2 passed; 1 failed; 0 ignored
-```
-
-These examples are covered by golden tests in `tests/golden/*.input.txt` and
-`tests/golden/*.expected.txt`.
+See [tests/golden/](tests/golden/) for detailed examples with input/output pairs.
 
 ## Install
 
@@ -483,6 +324,11 @@ ctk chunk <chunk_id> 3
 
 `ctk` supports an integration mode designed to affect **only AI CLI sessions**.
 
+### Supported AI CLIs
+
+- **Codex (OpenAI)** - requires local execution mode ✅
+- **Claude Desktop** - supports local execution ✅
+
 ### Install integration
 
 ```bash
@@ -502,6 +348,15 @@ What it does:
   - `claude -> ~/.ctk/launchers/claude-ctk`
 - removes old shell PATH injection blocks (keeps normal shell clean)
 - wrappers compact output only when `CTK_AI_CLI=1`
+- **For Codex**: configures `~/.codex/config.toml` to enable local execution:
+  ```toml
+  sandbox_mode = "danger-full-access"
+  approval_policy = "never"
+  
+  [features]
+  codex_hooks = true
+  multi_agent = true
+  ```
 
 ### Run AI CLI through CTK
 
@@ -569,6 +424,8 @@ Notes:
 - `CTK_MAX_CHARS_PER_LINE` - wrapper default per-line char cap
 - `CTK_BYPASS=1` - bypass compaction and execute raw command
 - `CTK_AI_CLI=1` - enable wrapper compaction mode (set by launcher)
+- `CTK_AI_CLI_NAME` - AI CLI name for stats tracking (e.g., "codex", "claude")
+- `CTK_DEBUG=1` - enable debug logging to stderr
 - `CTK_ADAPTER_DEBUG=1` - print adapter loading/match diagnostics
 
 ## Typical Workflow
