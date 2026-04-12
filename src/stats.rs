@@ -175,10 +175,6 @@ fn now_ms() -> u64 {
 }
 
 pub(crate) fn stats_path() -> PathBuf {
-    let local = PathBuf::from(".ctk/stats.json");
-    if local.parent().map(|p| p.exists()).unwrap_or(false) {
-        return local;
-    }
     env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."))

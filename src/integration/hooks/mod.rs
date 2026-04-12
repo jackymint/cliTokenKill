@@ -9,10 +9,7 @@ print(json.dumps({
     "hookSpecificOutput": {
         "hookEventName": "SessionStart",
         "additionalContext": (
-            "For Bash commands that may produce large output, prefer running them via "
-            "'ctk proxy -- <command>' so output is compacted before being returned. "
-            "Examples: 'ctk proxy -- git diff', 'ctk proxy -- rg ERROR .', "
-            "'ctk proxy -- cargo test'."
+            "CTK (cliTokenKill) is active. Command output will be automatically compacted."
         )
     }
 }))
@@ -21,57 +18,15 @@ print(json.dumps({
 const PRE_BASH_PY: &str = r#"#!/usr/bin/env python3
 import json
 import sys
-import os
 
-payload = json.load(sys.stdin)
-cmd = payload.get("tool_input", {}).get("command", "").strip()
-
-# Don't block if already wrapped
-if cmd.startswith("ctk proxy"):
-    sys.exit(0)
-
-# Block and require ctk proxy for all commands
-ctk_cmd = f"ctk proxy -- {cmd}"
-print(json.dumps({
-    "decision": "block",
-    "reason": "All Bash commands must use CTK proxy for output compaction.",
-    "hookSpecificOutput": {
-        "hookEventName": "PreToolUse",
-        "additionalContext": (
-            f"Please run this command via CTK: {ctk_cmd}"
-        )
-    }
-}))
+# Let all commands through - wrapper will handle compaction
 sys.exit(0)
 "#;
 
 const POST_BASH_PY: &str = r#"#!/usr/bin/env python3
-import json
 import sys
-import os
 
-payload = json.load(sys.stdin)
-cmd = payload.get("tool_input", {}).get("command", "")
-tool_response = payload.get("tool_response", "")
-
-text = tool_response if isinstance(tool_response, str) else json.dumps(tool_response)
-too_big = len(text) > 12000
-
-if too_big and not cmd.startswith("ctk proxy"):
-    ctk_cmd = f"ctk proxy -- {cmd}"
-    
-    print(json.dumps({
-        "decision": "block",
-        "reason": "The Bash output was large. Prefer rerunning via CTK.",
-        "hookSpecificOutput": {
-            "hookEventName": "PostToolUse",
-            "additionalContext": (
-                f"The previous Bash output was large. Prefer rerunning with: {ctk_cmd}"
-            )
-        }
-    }))
-    sys.exit(0)
-
+# Let all commands through - wrapper handles compaction
 sys.exit(0)
 "#;
 
