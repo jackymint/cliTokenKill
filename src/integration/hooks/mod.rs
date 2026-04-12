@@ -25,11 +25,11 @@ import sys
 payload = json.load(sys.stdin)
 cmd = payload.get("tool_input", {}).get("command", "").strip()
 
-# Don't block if already wrapped
-if cmd.startswith("ctk proxy"):
+# Don't block if already wrapped or is ctk command
+if cmd.startswith("ctk"):
     sys.exit(0)
 
-# Block and require ctk proxy for all commands
+# Block and require ctk proxy for all other commands
 ctk_cmd = f"ctk proxy -- {cmd}"
 print(json.dumps({
     "decision": "block",
@@ -67,7 +67,7 @@ sys.exit(0)
 pub fn install_hooks(home: &str) -> Result<Vec<PathBuf>> {
     let codex_dir = PathBuf::from(home).join(".codex");
     let hooks_dir = codex_dir.join("hooks");
-    
+
     fs::create_dir_all(&hooks_dir)
         .with_context(|| format!("failed to create {}", hooks_dir.display()))?;
 
@@ -90,7 +90,8 @@ pub fn install_hooks(home: &str) -> Result<Vec<PathBuf>> {
     }
 
     let hooks_json = codex_dir.join("hooks.json");
-    let config = format!(r#"{{
+    let config = format!(
+        r#"{{
   "hooks": {{
     "SessionStart": [
       {{
@@ -130,7 +131,11 @@ pub fn install_hooks(home: &str) -> Result<Vec<PathBuf>> {
     ]
   }}
 }}
-"#, hooks_dir.display(), hooks_dir.display(), hooks_dir.display());
+"#,
+        hooks_dir.display(),
+        hooks_dir.display(),
+        hooks_dir.display()
+    );
 
     fs::write(&hooks_json, config)?;
 
@@ -140,7 +145,7 @@ pub fn install_hooks(home: &str) -> Result<Vec<PathBuf>> {
     } else {
         String::new()
     };
-    
+
     if !config_content.contains("codex_hooks") {
         if !config_content.contains("[features]") {
             config_content.push_str("\n[features]\n");
@@ -158,9 +163,13 @@ pub fn install_hooks(home: &str) -> Result<Vec<PathBuf>> {
 pub fn uninstall_hooks(home: &str) -> Result<()> {
     let codex_dir = PathBuf::from(home).join(".codex");
     let hooks_dir = codex_dir.join("hooks");
-    
+
     if hooks_dir.exists() {
-        for file in ["ctk_session_start.py", "ctk_pre_bash.py", "ctk_post_bash.py"] {
+        for file in [
+            "ctk_session_start.py",
+            "ctk_pre_bash.py",
+            "ctk_post_bash.py",
+        ] {
             let path = hooks_dir.join(file);
             if path.exists() {
                 fs::remove_file(path)?;

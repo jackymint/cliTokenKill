@@ -17,7 +17,9 @@ use engine::{classify_content, compact_by_kind};
 use integration::claude::{doctor_claude, init_claude, uninstall_claude};
 use integration::codex::{doctor_codex, init_codex, uninstall_codex};
 use monitor::run_monitor;
-use report::{print_doctor_result, print_init_result, print_pipeline_output, print_uninstall_result};
+use report::{
+    print_doctor_result, print_init_result, print_pipeline_output, print_uninstall_result,
+};
 use stats::Stats;
 use std::fs;
 use std::path::PathBuf;
@@ -352,7 +354,19 @@ fn require_target_selected(codex: bool, claude: bool, verb: &str) -> Result<()> 
     std::process::exit(1);
 }
 
-fn run_and_exit(command: &[String], path: Option<PathBuf>, config: FilterConfig, mode: PipelineMode) -> Result<()> {
+fn run_and_exit(
+    command: &[String],
+    path: Option<PathBuf>,
+    config: FilterConfig,
+    mode: PipelineMode,
+) -> Result<()> {
+    // Log proxy execution
+    if std::env::var("CTK_DEBUG").is_ok() {
+        let cmd_str = command.join(" ");
+        let ai_cli = std::env::var("CTK_AI_CLI_NAME").unwrap_or_else(|_| "none".to_string());
+        eprintln!("[ctk proxy] ai_cli={} cmd={}", ai_cli, cmd_str);
+    }
+
     if let Some(ref dir) = path {
         std::env::set_current_dir(dir)
             .with_context(|| format!("failed to change directory to {}", dir.display()))?;
@@ -371,7 +385,23 @@ fn run_and_exit(command: &[String], path: Option<PathBuf>, config: FilterConfig,
     let chunk = maybe_auto_chunk(budgeted)?;
     let new_chunks = u64::from(print_pipeline_output(chunk));
 
-    record_stats(command, raw_chars, filtered_chars, latency_ms, fallback_used, new_chunks);
+    record_stats(
+        command,
+        raw_chars,
+        filtered_chars,
+        latency_ms,
+        fallback_used,
+        new_chunks,
+    );
+
+    // Log stats recording
+    if std::env::var("CTK_DEBUG").is_ok() {
+        let saved = raw_chars.saturating_sub(filtered_chars);
+        eprintln!(
+            "[ctk proxy] raw={} filtered={} saved={} fallback={}",
+            raw_chars, filtered_chars, saved, fallback_used
+        );
+    }
 
     if fallback_used {
         eprintln!("ctk: filter fallback to raw output");
@@ -391,7 +421,32 @@ fn record_stats(
     new_chunks: u64,
 ) {
     let cmd = command.first().map(|s| s.as_str()).unwrap_or("unknown");
-    let mut stats = Stats::load();
-    stats.record(cmd, raw_chars, filtered_chars, latency_ms, fallback, new_chunks);
-    stats.save().ok();
+    let stats = match Stats::record_and_save(
+        cmd,
+        raw_chars,
+        filtered_chars,
+        latency_ms,
+        fallback,
+        new_chunks,
+    ) {
+        Ok(stats) => stats,
+        Err(err) => {
+            eprintln!("ctk: failed to update stats: {err:#}");
+            return;
+        }
+    };
+
+    // Send stats to remote endpoint if configured
+    if let Ok(endpoint) = std::env::var("CTK_STATS_ENDPOINT") {
+        send_stats_to_remote(&endpoint, &stats).ok();
+    }
+}
+
+fn send_stats_to_remote(endpoint: &str, _stats: &Stats) -> Result<()> {
+    // TODO: Implement HTTP POST to remote endpoint
+    // For now, just log
+    if std::env::var("CTK_DEBUG").is_ok() {
+        eprintln!("[ctk] would send stats to: {}", endpoint);
+    }
+    Ok(())
 }

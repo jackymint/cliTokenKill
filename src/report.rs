@@ -14,7 +14,9 @@ pub fn print_pipeline_output(chunk: ChunkedText) -> bool {
             total_chunks,
             first_chunk,
         } => {
-            println!("[ctk auto-chunk id={id} chunks={total_chunks}] showing chunk 1/{total_chunks}");
+            println!(
+                "[ctk auto-chunk id={id} chunks={total_chunks}] showing chunk 1/{total_chunks}"
+            );
             println!("{first_chunk}");
             if total_chunks > 1 {
                 println!();

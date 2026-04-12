@@ -9,7 +9,6 @@ const ADAPTER_DEBUG_ENV: &str = "CTK_ADAPTER_DEBUG";
 const PROJECT_ADAPTER_DIR: &str = ".ctk/adapters";
 const GLOBAL_ADAPTER_DIR: &str = ".ctk/adapters";
 
-
 pub struct AdapterResult {
     pub name: String,
     pub output: String,

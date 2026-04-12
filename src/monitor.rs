@@ -14,7 +14,9 @@ const BOLD: &str = "\x1B[1m";
 const RESET: &str = "\x1B[0m";
 
 pub fn run_monitor() -> Result<()> {
-    Stats::default().save()?;
+    // Load existing stats or create new if not exists
+    let stats = Stats::load();
+    stats.save()?;
     render()?;
 
     let watch_path = {
@@ -32,10 +34,8 @@ pub fn run_monitor() -> Result<()> {
 
     for event in rx {
         let Ok(ev) = event else { continue };
-        let is_stats_write = matches!(
-            ev.kind,
-            EventKind::Create(_) | EventKind::Modify(_)
-        ) && ev.paths.iter().any(|p| p == &stats_path());
+        let is_stats_write = matches!(ev.kind, EventKind::Create(_) | EventKind::Modify(_))
+            && ev.paths.iter().any(|p| p == &stats_path());
         if is_stats_write {
             render()?;
         }
@@ -128,11 +128,7 @@ fn bar_graph(label: &str, unit: &str, values: &[u64], color: &str) -> String {
     out.push_str(&format!("  {DIM}└{}─{RESET}\n", "─".repeat(buckets)));
 
     let pad = buckets.saturating_sub(6);
-    out.push_str(&format!(
-        "   {DIM}-7m{:>pad$}now{RESET}\n",
-        "",
-        pad = pad
-    ));
+    out.push_str(&format!("   {DIM}-7m{:>pad$}now{RESET}\n", "", pad = pad));
 
     out
 }

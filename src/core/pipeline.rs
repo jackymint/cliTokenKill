@@ -443,7 +443,10 @@ mod tests {
     fn pipeline_details_dropped_lines_consistent() {
         let result = run_pipeline(&sh("echo hello"), config(), PipelineMode::Normal).unwrap();
         let d = &result.details;
-        assert_eq!(d.dropped_lines, d.raw_lines.saturating_sub(d.filtered_lines));
+        assert_eq!(
+            d.dropped_lines,
+            d.raw_lines.saturating_sub(d.filtered_lines)
+        );
     }
 
     #[test]
