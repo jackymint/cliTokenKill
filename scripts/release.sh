@@ -10,11 +10,16 @@ fi
 
 REPO="jackymint/cliTokenKill"
 BRANCH="release/v${VERSION}"
+CURRENT_BRANCH=$(git branch --show-current)
 
 echo "==> Creating release v${VERSION}"
 
 # Update Cargo.toml version
-sed -i '' "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  sed -i '' "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+else
+  sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+fi
 
 # Build release
 cargo build --release
@@ -22,6 +27,7 @@ cargo build --release
 # Commit changes
 git add Cargo.toml Cargo.lock
 git commit -m "Release v${VERSION}"
+git push origin "${CURRENT_BRANCH}"
 
 # Create and push tag
 git tag "v${VERSION}"
@@ -32,10 +38,10 @@ echo "==> Creating GitHub Release..."
 gh release create "v${VERSION}" \
   --title "v${VERSION}" \
   --notes "Release v${VERSION}" \
-  --target main
+  --target "${CURRENT_BRANCH}"
 
 # Wait for release to be available
-sleep 2
+sleep 3
 
 # Generate SHA256
 echo "==> Generating SHA256..."
@@ -43,15 +49,22 @@ TARBALL_URL="https://github.com/${REPO}/archive/refs/tags/v${VERSION}.tar.gz"
 SHA256=$(curl -sL "${TARBALL_URL}" | shasum -a 256 | awk '{print $1}')
 echo "SHA256: ${SHA256}"
 
-# Create release branch
-git checkout -b "${BRANCH}"
-git push origin "${BRANCH}"
+# Create release branch if not already on it
+if [ "${CURRENT_BRANCH}" != "${BRANCH}" ]; then
+  git checkout -b "${BRANCH}"
+  git push origin "${BRANCH}"
+fi
 
 # Update homebrew formula
 FORMULA_PATH="../homebrew-tap/Formula/ctk.rb"
 if [ -f "$FORMULA_PATH" ]; then
-  sed -i '' "s|url \".*\"|url \"${TARBALL_URL}\"|" "$FORMULA_PATH"
-  sed -i '' "s/sha256 \".*\"/sha256 \"${SHA256}\"/" "$FORMULA_PATH"
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "s|url \".*\"|url \"${TARBALL_URL}\"|" "$FORMULA_PATH"
+    sed -i '' "s/sha256 \".*\"/sha256 \"${SHA256}\"/" "$FORMULA_PATH"
+  else
+    sed -i "s|url \".*\"|url \"${TARBALL_URL}\"|" "$FORMULA_PATH"
+    sed -i "s/sha256 \".*\"/sha256 \"${SHA256}\"/" "$FORMULA_PATH"
+  fi
   
   cd ../homebrew-tap
   git add Formula/ctk.rb
@@ -62,14 +75,19 @@ fi
 
 # Create PR
 echo "==> Creating PR..."
-gh pr create \
-  --base main \
-  --head "${BRANCH}" \
-  --title "Release v${VERSION}" \
-  --body "Release v${VERSION}
+if gh auth status &>/dev/null; then
+  gh pr create \
+    --base main \
+    --head "${BRANCH}" \
+    --title "Release v${VERSION}" \
+    --body "Release v${VERSION}
 
 SHA256: \`${SHA256}\`
 
 See CHANGELOG for details." || echo "PR creation failed - create manually at: https://github.com/${REPO}/compare/main...${BRANCH}"
+else
+  echo "GitHub CLI not authenticated. Create PR manually at:"
+  echo "https://github.com/${REPO}/compare/main...${BRANCH}"
+fi
 
 echo "==> Done! v${VERSION} released"
