@@ -42,6 +42,10 @@ impl Stats {
             .unwrap_or_default()
     }
 
+    pub fn clear() -> Result<()> {
+        Self::default().save()
+    }
+
     pub fn save(&self) -> Result<()> {
         let path = stats_path();
         if let Some(parent) = path.parent() {
@@ -313,6 +317,25 @@ mod tests {
             let saved = Stats::load();
             assert_eq!(saved.total_commands, 80);
             assert_eq!(saved.command_counts.get("echo"), Some(&80));
+        });
+    }
+
+    #[test]
+    fn clear_resets_saved_stats() {
+        with_temp_home(|_| {
+            Stats::record_and_save("echo", 20, 12, 5, false, 0).unwrap();
+
+            Stats::clear().unwrap();
+
+            let saved = Stats::load();
+            assert_eq!(saved.total_commands, 0);
+            assert_eq!(saved.total_raw_tokens, 0);
+            assert_eq!(saved.total_filtered_tokens, 0);
+            assert_eq!(saved.total_fallbacks, 0);
+            assert_eq!(saved.total_chunks, 0);
+            assert!(saved.command_counts.is_empty());
+            assert!(saved.recent_events.is_empty());
+            assert_eq!(saved.last_ai_cli, None);
         });
     }
 }

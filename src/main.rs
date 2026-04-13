@@ -156,7 +156,11 @@ enum Commands {
         index: usize,
     },
     /// Show live token-saving stats dashboard
-    Monitor,
+    Monitor {
+        /// Clear stored monitor stats and exit
+        #[arg(long)]
+        clear: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -262,7 +266,14 @@ fn handle_command(command: Commands) -> Result<()> {
         Commands::Doctor { codex, claude, fix } => {
             handle_doctor(codex, claude, fix)?;
         }
-        Commands::Monitor => run_monitor()?,
+        Commands::Monitor { clear } => {
+            if clear {
+                Stats::clear()?;
+                println!("Cleared monitor stats at {}", stats::stats_path().display());
+            } else {
+                run_monitor()?;
+            }
+        }
     }
     Ok(())
 }
