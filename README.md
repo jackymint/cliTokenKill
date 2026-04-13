@@ -32,6 +32,7 @@ In a separate terminal:
 
 ```bash
 ctk monitor
+ctk monitor --clear
 ```
 
 Output:
@@ -102,6 +103,7 @@ ctk explain -- cargo test
 - `err`: signal-only error/warning output
 - `chunk`: fetch stored auto-chunks by id/index
 - `monitor`: view live token-saving stats and top commands
+- `monitor --clear`: reset stored monitor stats
 - `init --codex/--claude`: install AI CLI integration (AI-CLI-only)
 - `doctor --codex/--claude`: inspect integration state
 - `uninstall --codex/--claude`: remove integration
@@ -341,10 +343,8 @@ What it does:
 
 - creates wrappers in `~/.ctk/bin`
 - creates launchers:
-  - `~/.ctk/launchers/codex-ctk`
   - `~/.ctk/launchers/claude-ctk`
 - adds shell aliases in `~/.zshrc` and `~/.bashrc`:
-  - `codex -> ~/.ctk/launchers/codex-ctk`
   - `claude -> ~/.ctk/launchers/claude-ctk`
 - removes old shell PATH injection blocks (keeps normal shell clean)
 - wrappers compact output only when `CTK_AI_CLI=1`
@@ -361,20 +361,23 @@ What it does:
 ### Run AI CLI through CTK
 
 ```bash
-codex   # after opening a new shell
+codex
 claude  # after opening a new shell
 
-# direct launchers also work
-~/.ctk/launchers/codex-ctk
+# direct launcher also works
 ~/.ctk/launchers/claude-ctk
 ```
 
-These launchers set:
+Codex uses hooks to enforce:
+
+- `CTK_AI_CLI_NAME=codex ctk proxy -- <command>`
+
+Claude launcher sets:
 
 - `CTK_AI_CLI=1`
 - `PATH="$HOME/.ctk/bin:$PATH"`
 
-So compaction is active in that AI CLI session, while normal terminal sessions remain unaffected.
+So compaction is active in the AI CLI session, while normal terminal sessions remain unaffected.
 
 ### Check integration
 
@@ -432,7 +435,7 @@ Notes:
 
 1. Build `ctk`
 2. Run `ctk init --codex` and/or `ctk init --claude`
-3. Start AI CLI with the corresponding launcher (`codex-ctk` or `claude-ctk`)
+3. Start Codex normally or start Claude with the corresponding launcher (`claude-ctk`)
 4. Work normally while command output is compacted/chunked
 5. Use `ctk chunk <id> <n>` only when more context is needed
 

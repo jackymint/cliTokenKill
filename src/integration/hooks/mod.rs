@@ -10,9 +10,10 @@ print(json.dumps({
         "hookEventName": "SessionStart",
         "additionalContext": (
             "For Bash commands that may produce large output, run them via "
-            "'ctk proxy -- <command>' to compact output before returning. "
-            "Examples: 'ctk proxy -- git diff', 'ctk proxy -- rg ERROR .', "
-            "'ctk proxy -- cargo test'."
+            "'CTK_AI_CLI_NAME=codex ctk proxy -- <command>' to compact output "
+            "before returning. Examples: 'CTK_AI_CLI_NAME=codex ctk proxy -- "
+            "git diff', 'CTK_AI_CLI_NAME=codex ctk proxy -- rg ERROR .', "
+            "'CTK_AI_CLI_NAME=codex ctk proxy -- cargo test'."
         )
     }
 }))
@@ -24,13 +25,18 @@ import sys
 
 payload = json.load(sys.stdin)
 cmd = payload.get("tool_input", {}).get("command", "").strip()
+normalized_cmd = cmd
+
+if normalized_cmd.startswith("CTK_AI_CLI_NAME="):
+    parts = normalized_cmd.split(None, 1)
+    normalized_cmd = parts[1].lstrip() if len(parts) == 2 else ""
 
 # Don't block if already wrapped or is ctk command
-if cmd.startswith("ctk"):
+if normalized_cmd.startswith("ctk"):
     sys.exit(0)
 
 # Block and require ctk proxy for all other commands
-ctk_cmd = f"ctk proxy -- {cmd}"
+ctk_cmd = f"CTK_AI_CLI_NAME=codex ctk proxy -- {cmd}"
 print(json.dumps({
     "decision": "block",
     "reason": f"Please run via CTK: {ctk_cmd}"
