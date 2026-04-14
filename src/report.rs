@@ -29,30 +29,12 @@ pub fn print_pipeline_output(chunk: ChunkedText) -> bool {
 
 pub fn print_init_result(target: &str, result: &InitResult) {
     println!("ctk {target} integration installed");
-    if target == "codex" && result.launcher_path.is_none() {
-        println!("mode: hook-only");
-    } else {
-        println!("mode: ai-cli-only");
-    }
+    println!("mode: {}", init_mode_label(target, result));
     println!("wrapper dir: {}", result.bin_dir.display());
     print_wrappers_summary(&result.wrappers_installed);
-    if let Some(launcher) = &result.launcher_path {
-        println!("launcher: {}", launcher.display());
-        println!("use: {} <args>", launcher.display());
-    } else if target == "codex" {
-        println!("launcher: not used");
-    } else {
-        println!("launcher: {target} not found in PATH");
-    }
+    print_launcher_summary(target, result);
     print_rc_update_summary(&result.rc_files_updated, "already clean");
-    if result.launcher_path.is_some() {
-        println!("shell alias: {target} -> ~/.ctk/launchers/{target}-ctk");
-        println!("next: open a new shell, then run: {target}");
-    } else if target == "codex" {
-        println!("next: start codex normally");
-    } else {
-        println!("next: run {target} via launcher once available");
-    }
+    print_init_next_steps(target, result);
 }
 
 pub fn print_uninstall_result(target: &str, result: &UninstallResult) {
@@ -76,18 +58,7 @@ pub fn print_doctor_result(target: &str, d: &DoctorResult) {
     } else {
         println!("ctk wrapper dir in login shell PATH: unknown");
     }
-    if target != "codex" {
-        println!("launcher exists: {}", d.launcher_exists);
-        println!("launcher path: {}", d.launcher_path.display());
-        match &d.launcher_exec_path {
-            Some(path) => println!("launcher exec target: {}", path.display()),
-            None => println!("launcher exec target: unknown"),
-        }
-        match d.launcher_selected_first {
-            Some(v) => println!("launcher selected first: {v}"),
-            None => println!("launcher selected first: unknown"),
-        }
-    }
+    print_doctor_launcher_details(target, d);
     match &d.shell_selected {
         Some(selected) => println!("shell resolves first: {selected}"),
         None => println!("shell resolves first: unknown"),
@@ -133,6 +104,53 @@ pub fn print_doctor_result(target: &str, d: &DoctorResult) {
         println!("hint: launcher is not first in PATH resolution; reopen shell or fix alias order");
     }
     println!("hint: if your shell still uses cached command paths, run: hash -r");
+}
+
+fn init_mode_label(target: &str, result: &InitResult) -> &'static str {
+    if target == "codex" && result.launcher_path.is_none() {
+        "hook-only"
+    } else {
+        "ai-cli-only"
+    }
+}
+
+fn print_launcher_summary(target: &str, result: &InitResult) {
+    if let Some(launcher) = &result.launcher_path {
+        println!("launcher: {}", launcher.display());
+        println!("use: {} <args>", launcher.display());
+    } else if target == "codex" {
+        println!("launcher: not used");
+    } else {
+        println!("launcher: {target} not found in PATH");
+    }
+}
+
+fn print_init_next_steps(target: &str, result: &InitResult) {
+    if result.launcher_path.is_some() {
+        println!("shell alias: {target} -> ~/.ctk/launchers/{target}-ctk");
+        println!("next: open a new shell, then run: {target}");
+    } else if target == "codex" {
+        println!("next: start codex normally");
+    } else {
+        println!("next: run {target} via launcher once available");
+    }
+}
+
+fn print_doctor_launcher_details(target: &str, d: &DoctorResult) {
+    if target == "codex" {
+        return;
+    }
+
+    println!("launcher exists: {}", d.launcher_exists);
+    println!("launcher path: {}", d.launcher_path.display());
+    match &d.launcher_exec_path {
+        Some(path) => println!("launcher exec target: {}", path.display()),
+        None => println!("launcher exec target: unknown"),
+    }
+    match d.launcher_selected_first {
+        Some(v) => println!("launcher selected first: {v}"),
+        None => println!("launcher selected first: unknown"),
+    }
 }
 
 fn print_wrappers_summary(wrappers: &[String]) {

@@ -149,8 +149,13 @@ fn print_stage_reports(stage_reports: &[PipelineStageReport]) {
     println!("pipeline stages:");
     for stage in stage_reports {
         println!(
-            " - {}: selected={} lines {} -> {} ({})",
-            stage.stage, stage.selected, stage.lines_before, stage.lines_after, stage.reason
+            " - {}: selected={} lines {} -> {} time={}ms ({})",
+            stage.stage,
+            stage.selected,
+            stage.lines_before,
+            stage.lines_after,
+            stage.elapsed_ms,
+            stage.reason
         );
     }
 }
