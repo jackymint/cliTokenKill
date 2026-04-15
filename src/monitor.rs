@@ -1,4 +1,4 @@
-use crate::stats::{Stats, stats_path};
+use crate::stats::{Stats, events_path, stats_path};
 use anyhow::Result;
 use notify::{EventKind, RecursiveMode, Watcher, recommended_watcher};
 use std::io::{self, Write};
@@ -35,7 +35,10 @@ pub fn run_monitor() -> Result<()> {
     for event in rx {
         let Ok(ev) = event else { continue };
         let is_stats_write = matches!(ev.kind, EventKind::Create(_) | EventKind::Modify(_))
-            && ev.paths.iter().any(|p| p == &stats_path());
+            && ev
+                .paths
+                .iter()
+                .any(|p| p == &stats_path() || p == &events_path());
         if is_stats_write {
             render()?;
         }

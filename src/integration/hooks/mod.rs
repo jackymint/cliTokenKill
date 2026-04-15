@@ -35,7 +35,9 @@ if normalized_cmd.startswith("CTK_AI_CLI_NAME="):
 if normalized_cmd.startswith("ctk"):
     sys.exit(0)
 
-# Block and require ctk proxy for all other commands
+# This Codex hook runtime does not support command rewriting via updatedInput,
+# so block and ask the agent to retry through CTK instead. Keep this tiny so the
+# hook fails fast when the command is already compliant.
 ctk_cmd = f"CTK_AI_CLI_NAME=codex ctk proxy -- {cmd}"
 print(json.dumps({
     "decision": "block",
@@ -118,7 +120,8 @@ pub fn install_hooks(home: &str) -> Result<Vec<PathBuf>> {
           {{
             "type": "command",
             "command": "/usr/bin/python3 {}/ctk_pre_bash.py",
-            "statusMessage": "Checking Bash command for CTK"
+            "statusMessage": "Checking Bash command for CTK",
+            "timeout": 200
           }}
         ]
       }}
