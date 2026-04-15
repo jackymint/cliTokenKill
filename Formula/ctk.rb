@@ -1,7 +1,7 @@
 class Ctk < Formula
   desc "Reduce terminal output before it reaches AI assistant context"
   homepage "https://github.com/jackymint/cliTokenKill"
-  url "https://github.com/jackymint/cliTokenKill/archive/refs/tags/v0.30.1.tar.gz"
+  url "https://github.com/jackymint/cliTokenKill/archive/refs/tags/v0.30.2.tar.gz"
   sha256 "PLACEHOLDER"
   license "MIT"
 
