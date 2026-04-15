@@ -15,8 +15,7 @@ ctk --help
 ### 2) Enable auto mode for Codex/Claude
 
 ```bash
-ctk init --codex --claude
-exec $SHELL -l
+ctk init --codex --claude && exec $SHELL -l
 ```
 
 After reloading shell, use AI CLI as usual:

@@ -3,16 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
-use std::fs::OpenOptions;
-use std::io::ErrorKind;
-use std::path::PathBuf;
-use std::thread;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 const MAX_EVENTS: usize = 120;
 const GRAPH_WINDOW_MS: u64 = 7 * 60 * 1000;
-const STATS_LOCK_RETRY_MS: u64 = 10;
-const STATS_LOCK_TIMEOUT_MS: u64 = 2_000;
 
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Stats {
@@ -36,6 +29,10 @@ pub struct StatEvent {
 
 impl Stats {
     pub fn load() -> Self {
+        if let Some(stats) = load_event_stats() {
+            return stats;
+        }
+
         fs::read_to_string(stats_path())
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
@@ -43,6 +40,7 @@ impl Stats {
     }
 
     pub fn clear() -> Result<()> {
+        clear_event_log()?;
         Self::default().save()
     }
 
@@ -68,8 +66,7 @@ impl Stats {
         fallback: bool,
         new_chunks: u64,
     ) -> Result<Self> {
-        let _lock = StatsLock::acquire()?;
-        let mut stats = Self::load();
+        let mut stats = Self::default();
         stats.record(
             command,
             raw_chars,
@@ -78,7 +75,7 @@ impl Stats {
             fallback,
             new_chunks,
         );
-        stats.save()?;
+        append_stats_event(&stats)?;
         Ok(stats)
     }
 
@@ -165,5 +162,8 @@ mod store;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use self::store::stats_path;
-use self::store::{StatsLock, bucket_max, bucket_sum, chars_to_tokens, now_ms};
+use self::store::{
+    append_stats_event, bucket_max, bucket_sum, chars_to_tokens, clear_event_log, load_event_stats,
+    now_ms,
+};
+pub(crate) use self::store::{events_path, stats_path};
