@@ -345,11 +345,43 @@ fn resolve_command_path(command: &str, ignore_prefixes: &[PathBuf]) -> Result<Op
 }
 fn wrapper_script(ctk_bin: &Path, real_cmd: &Path) -> String {
     format!(
-        r#"#!/usr/bin/env bashset -euo pipefail_ctk_active=0if [[ "${{{AI_ENV_FLAG}:-0}}" == "1" ]]; then  _ctk_active=1else  _pid=$PPID  for _i in 1 2 3 4 5; do    _name=$(ps -p "$_pid" -o comm= 2>/dev/null) || break    case "$_name" in      codex|claude|gemini|*"Amazon Q"*|*amazonq*) _ctk_active=1; break ;;    esac    _pid=$(ps -p "$_pid" -o ppid= 2>/dev/null | tr -d ' ') || break    [[ "${{_pid:-1}}" -le 1 ]] && break  donefiif [[ "$_ctk_active" != "1" ]]; then exec "{real}" "$@"; fiif [[ "${{CTK_BYPASS:-0}}" == "1" ]]; then exec "{real}" "$@"; fiexec "{ctk}" proxy --level "${{CTK_LEVEL:-aggressive}}" --max-lines "${{CTK_MAX_LINES:-80}}" --max-chars-per-line "${{CTK_MAX_CHARS_PER_LINE:-220}}" -- "{real}" "$@""#,
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+
+_ctk_active=0
+if [[ "${{{AI_ENV_FLAG}:-0}}" == "1" ]]; then
+  _ctk_active=1
+else
+  _pid=$PPID
+  for _i in 1 2 3 4 5; do
+    _name=$(ps -p "$_pid" -o comm= 2>/dev/null) || break
+    case "$_name" in
+      codex|claude|gemini|*"Amazon Q"*|*amazonq*) _ctk_active=1; break ;;
+    esac
+    _pid=$(ps -p "$_pid" -o ppid= 2>/dev/null | tr -d ' ') || break
+    [[ "${{_pid:-1}}" -le 1 ]] && break
+  done
+fi
+
+if [[ "$_ctk_active" != "1" ]]; then
+  exec "{real}" "$@"
+fi
+
+if [[ "${{CTK_BYPASS:-0}}" == "1" ]]; then
+  exec "{real}" "$@"
+fi
+
+exec "{ctk}" proxy \
+  --level "${{CTK_LEVEL:-aggressive}}" \
+  --max-lines "${{CTK_MAX_LINES:-80}}" \
+  --max-chars-per-line "${{CTK_MAX_CHARS_PER_LINE:-220}}" \
+  -- "{real}" "$@"
+"#,
         real = real_cmd.display(),
         ctk = ctk_bin.display(),
     )
 }
+
 #[cfg(unix)]
 fn set_executable(path: &Path) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
