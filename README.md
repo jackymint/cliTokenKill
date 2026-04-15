@@ -8,7 +8,7 @@ It is designed for AI coding workflows where command output (logs, diffs, test o
 ### 1) Install quickly
 
 ```bash
-brew install jackymint/tap/ctk
+brew install jackymint/cliTokenKill/ctk
 ctk --help
 ```
 
@@ -165,7 +165,7 @@ See [tests/golden/](tests/golden/) for detailed examples with input/output pairs
 ### Homebrew (recommended)
 
 ```bash
-brew install jackymint/tap/ctk
+brew install jackymint/cliTokenKill/ctk
 ```
 
 ### From source
