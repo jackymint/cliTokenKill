@@ -22,27 +22,46 @@ const AI_ENV_FLAG: &str = "CTK_AI_CLI";
 const LAUNCH_DEPTH_ENV: &str = "CTK_LAUNCH_DEPTH";
 const MAX_LAUNCH_DEPTH: usize = 3;
 const SKIP_WRAPPING: &[&str] = &[
+    // ctk itself
     "ctk",
+    // shells
     "bash",
     "zsh",
     "sh",
     "fish",
+    // privilege / remote
     "sudo",
     "su",
     "ssh",
     "scp",
     "sftp",
     "login",
+    // process helpers
     "env",
     "which",
+    // container runtimes
     "docker",
     "docker-compose",
+    // Rust toolchain
     "cargo",
     "rustc",
     "rustup",
+    // AI CLIs (launchers must not wrap themselves)
     "codex",
     "claude",
     "gemini",
+    // Node.js runtime — Claude Code and Codex are Node apps that spawn
+    // internal node subprocesses for config loading and IPC.  Wrapping
+    // node truncates that output at CTK's line limit and breaks startup.
+    "node",
+    "npm",
+    "npx",
+    "corepack",
+    // Python runtime — Gemini CLI and other AI tools are Python-based.
+    "python",
+    "python3",
+    "pip",
+    "pip3",
 ];
 pub struct InitResult {
     pub wrappers_installed: Vec<String>,
