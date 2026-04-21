@@ -68,8 +68,8 @@ pub(crate) fn handle_command(command: Commands) -> Result<()> {
             max_lines,
             max_chars_per_line,
         } => explain_file(&file, filter_config(level, max_lines, max_chars_per_line))?,
-        Commands::Init { codex, claude } => {
-            handle_init(codex, claude)?;
+        Commands::Init { codex, claude, allow_danger_full_access } => {
+            handle_init(codex, claude, allow_danger_full_access)?;
         }
         Commands::Chunk { id, index } => handle_chunk(&id, index)?,
         Commands::Uninstall { codex, claude } => {
@@ -100,10 +100,10 @@ fn handle_read(file: PathBuf, config: FilterConfig) -> Result<()> {
     Ok(())
 }
 
-fn handle_init(codex: bool, claude: bool) -> Result<()> {
+fn handle_init(codex: bool, claude: bool, allow_danger_full_access: bool) -> Result<()> {
     require_target_selected(codex, claude, "init")?;
     if codex {
-        let result = init_codex()?;
+        let result = init_codex(allow_danger_full_access)?;
         print_init_result("codex", &result);
     }
     if claude {

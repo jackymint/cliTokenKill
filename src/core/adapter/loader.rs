@@ -150,8 +150,10 @@ fn parse_level(raw: Option<&str>, file: &Path, name: &str) -> Option<FilterLevel
 fn adapter_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
 
-    if let Ok(cwd) = env::current_dir() {
-        dirs.push(cwd.join(PROJECT_ADAPTER_DIR));
+    if project_scope_trusted() {
+        if let Ok(cwd) = env::current_dir() {
+            dirs.push(cwd.join(PROJECT_ADAPTER_DIR));
+        }
     }
 
     if let Some(home) = env::var_os("HOME") {
@@ -159,6 +161,45 @@ fn adapter_dirs() -> Vec<PathBuf> {
     }
 
     dirs
+}
+
+fn project_scope_trusted() -> bool {
+    // Per-invocation opt-in via env var
+    if matches!(
+        env::var("CTK_TRUST_PROJECT_ADAPTERS")
+            .ok()
+            .as_deref()
+            .map(str::trim)
+            .map(|s| s.to_ascii_lowercase())
+            .as_deref(),
+        Some("1" | "true" | "yes" | "on")
+    ) {
+        return true;
+    }
+
+    // Persistent opt-in via ~/.ctk/trusted_projects (one path per line)
+    let Ok(cwd) = env::current_dir() else {
+        return false;
+    };
+    let Some(home) = env::var_os("HOME") else {
+        return false;
+    };
+    let list = PathBuf::from(home).join(".ctk").join("trusted_projects");
+    let Ok(content) = fs::read_to_string(&list) else {
+        return false;
+    };
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if cwd.starts_with(PathBuf::from(trimmed)) {
+            return true;
+        }
+    }
+
+    false
 }
 
 fn is_toml_file(path: &Path) -> bool {

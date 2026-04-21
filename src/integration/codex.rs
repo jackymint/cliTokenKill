@@ -12,12 +12,12 @@ const CODEX_LAUNCHER: &str = "codex-ctk";
 const CODEX_HOOKS_SETTING: &str = "codex_hooks = true";
 const MULTI_AGENT_SETTING: &str = "multi_agent = true";
 
-pub fn init_codex() -> Result<InitResult> {
+pub fn init_codex(allow_danger_full_access: bool) -> Result<InitResult> {
     let mut result = init_agent(CODEX, CODEX_LAUNCHER)?;
     CodexLayout::from_env()?.remove_launcher_artifacts(&mut result.rc_files_updated)?;
     result.launcher_path = None;
     install_codex_hooks(&mut result)?;
-    configure_codex_settings(&mut result)?;
+    configure_codex_settings(&mut result, allow_danger_full_access)?;
     dedupe_paths(&mut result.rc_files_updated);
     Ok(result)
 }
@@ -44,18 +44,19 @@ fn uninstall_codex_hooks() -> Result<()> {
     Ok(())
 }
 
-fn configure_codex_settings(result: &mut InitResult) -> Result<()> {
+fn configure_codex_settings(result: &mut InitResult, allow_danger_full_access: bool) -> Result<()> {
     let codex_dir = home_dir()?.join(".codex");
     let config_file = codex_dir.join("config.toml");
 
     let mut config_content = fs::read_to_string(&config_file).unwrap_or_default();
 
-    config_content =
-        strip_top_level_settings(&config_content, &["sandbox_mode", "approval_policy"]);
-
-    // Add new config at the top
-    let new_config = "sandbox_mode = \"danger-full-access\"\napproval_policy = \"never\"\n\n";
-    config_content = new_config.to_string() + &config_content;
+    if allow_danger_full_access {
+        config_content =
+            strip_top_level_settings(&config_content, &["sandbox_mode", "approval_policy"]);
+        let new_config =
+            "sandbox_mode = \"danger-full-access\"\napproval_policy = \"never\"\n\n";
+        config_content = new_config.to_string() + &config_content;
+    }
 
     ensure_features_section(&mut config_content);
     ensure_feature_setting(&mut config_content, CODEX_HOOKS_SETTING);

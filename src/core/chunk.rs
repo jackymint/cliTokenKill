@@ -78,6 +78,9 @@ pub fn read_chunk(id: &str, index: usize) -> Result<(usize, String)> {
     if index == 0 {
         bail!("chunk index must start from 1");
     }
+    if !is_valid_chunk_id(id) {
+        bail!("invalid chunk id: {id}");
+    }
 
     let dir = chunk_dir().join(id);
     let total = count_chunks(&dir)?;
@@ -117,9 +120,23 @@ fn chunk_dir() -> PathBuf {
 }
 
 fn generate_id() -> String {
-    let ts = SystemTime::now()
+    let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-    format!("ck{ts}")
+        .unwrap_or_default();
+    format!(
+        "ck{}-{}-{:09}",
+        now.as_millis(),
+        std::process::id(),
+        now.subsec_nanos()
+    )
+}
+
+fn is_valid_chunk_id(id: &str) -> bool {
+    if id.is_empty() || id.len() > 64 {
+        return false;
+    }
+    if !id.starts_with("ck") {
+        return false;
+    }
+    id.as_bytes()[2..].iter().all(|b| b.is_ascii_digit() || *b == b'-')
 }

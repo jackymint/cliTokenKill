@@ -300,6 +300,20 @@ fn link_ctk_binary(bin_dir: &Path) -> Result<()> {
     }
     Ok(())
 }
+/// Escapes a path for safe embedding inside bash double quotes.
+/// Handles \, ", $, and backtick — all of which are legal in Unix paths.
+fn bash_double_quote(path: &Path) -> String {
+    let s = path.to_string_lossy();
+    let mut out = String::with_capacity(s.len() + 8);
+    for ch in s.chars() {
+        if matches!(ch, '\\' | '"' | '$' | '`') {
+            out.push('\\');
+        }
+        out.push(ch);
+    }
+    out
+}
+
 fn create_launcher(
     layout: &AgentLayout,
     agent_cmd: &str,
@@ -316,10 +330,10 @@ fn create_launcher(
         )
     })?;
     let launcher_path = layout.launchers_dir.join(launcher_file);
+    let bin_dir_q = bash_double_quote(&layout.bin_dir);
+    let real_agent_q = bash_double_quote(&real_agent);
     let script = format!(
-        "#!/usr/bin/env bash\nset -euo pipefail\ndepth=\"${{{LAUNCH_DEPTH_ENV}:-0}}\"\nif (( depth >= {MAX_LAUNCH_DEPTH} )); then\n  echo \"ctk: launcher recursion guard triggered ({agent_cmd})\" >&2\n  exit 125\nfi\nexport {LAUNCH_DEPTH_ENV}=\"$((depth + 1))\"\nexport {AI_ENV_FLAG}=1\nexport CTK_AI_CLI_NAME={agent_cmd}\nexport PATH=\"{}:$PATH\"\nexec \"{}\" \"$@\"\n",
-        layout.bin_dir.display(),
-        real_agent.display(),
+        "#!/usr/bin/env bash\nset -euo pipefail\ndepth=\"${{{LAUNCH_DEPTH_ENV}:-0}}\"\nif (( depth >= {MAX_LAUNCH_DEPTH} )); then\n  echo \"ctk: launcher recursion guard triggered ({agent_cmd})\" >&2\n  exit 125\nfi\nexport {LAUNCH_DEPTH_ENV}=\"$((depth + 1))\"\nexport {AI_ENV_FLAG}=1\nexport CTK_AI_CLI_NAME={agent_cmd}\nexport PATH=\"{bin_dir_q}:$PATH\"\nexec \"{real_agent_q}\" \"$@\"\n",
     );
     fs::write(&launcher_path, script)
         .with_context(|| format!("failed to write launcher: {}", launcher_path.display()))?;
@@ -344,6 +358,8 @@ fn resolve_command_path(command: &str, ignore_prefixes: &[PathBuf]) -> Result<Op
     Ok(None)
 }
 fn wrapper_script(ctk_bin: &Path, real_cmd: &Path) -> String {
+    let real = bash_double_quote(real_cmd);
+    let ctk = bash_double_quote(ctk_bin);
     format!(
         r#"#!/usr/bin/env bash
 set -euo pipefail
@@ -377,8 +393,6 @@ exec "{ctk}" proxy \
   --max-chars-per-line "${{CTK_MAX_CHARS_PER_LINE:-220}}" \
   -- "{real}" "$@"
 "#,
-        real = real_cmd.display(),
-        ctk = ctk_bin.display(),
     )
 }
 
