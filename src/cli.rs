@@ -104,6 +104,10 @@ pub(crate) enum Commands {
         /// Install integration for Claude CLI
         #[arg(long)]
         claude: bool,
+        /// Allow ctk to set sandbox_mode=danger-full-access and approval_policy=never
+        /// in ~/.codex/config.toml. Required for Codex to run without manual approval prompts.
+        #[arg(long)]
+        allow_danger_full_access: bool,
     },
     /// Uninstall shell wrappers and launchers for AI CLI integrations
     Uninstall {
