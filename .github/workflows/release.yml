@@ -81,14 +81,25 @@ jobs:
 
       - name: Update Homebrew formula SHA
         run: |
-          TAG=${GITHUB_REF_NAME}
           SHA=${{ steps.source.outputs.sha256 }}
           sed -i "s/sha256 \".*\"/sha256 \"${SHA}\"/" Formula/ctk.rb
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/ctk.rb
-          git diff --cached --quiet || git commit -m "Release ${TAG}: update Homebrew formula SHA256"
-          git push origin HEAD:main
+
+      - name: Open PR to update formula SHA
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
+        id: formula_pr
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: chore/formula-sha-${{ github.ref_name }}
+          commit-message: "Release ${{ github.ref_name }}: update Homebrew formula SHA256"
+          title: "Release ${{ github.ref_name }}: update Homebrew formula SHA256"
+          body: "Automated SHA256 update for the Homebrew formula. Triggered by release workflow."
+          base: main
+
+      - name: Auto-merge formula PR
+        if: steps.formula_pr.outputs.pull-request-number != ''
+        run: gh pr merge "${{ steps.formula_pr.outputs.pull-request-number }}" --squash --auto
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
