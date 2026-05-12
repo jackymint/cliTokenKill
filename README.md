@@ -8,6 +8,8 @@ It is designed for AI coding workflows where command output (logs, diffs, test o
 ### 1) Install quickly
 
 ```bash
+brew untap jackymint/cliTokenKill 2>/dev/null || true
+brew tap jackymint/cliTokenKill https://github.com/jackymint/cliTokenKill
 brew install jackymint/cliTokenKill/ctk
 ctk --help
 ```
@@ -164,7 +166,14 @@ See [tests/golden/](tests/golden/) for detailed examples with input/output pairs
 ### Homebrew (recommended)
 
 ```bash
+brew tap jackymint/cliTokenKill https://github.com/jackymint/cliTokenKill
 brew install jackymint/cliTokenKill/ctk
+```
+
+If you prefer installing directly from the formula file:
+
+```bash
+brew install --formula https://raw.githubusercontent.com/jackymint/cliTokenKill/main/Formula/ctk.rb
 ```
 
 ### From source
