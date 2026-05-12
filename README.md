@@ -8,6 +8,8 @@ It is designed for AI coding workflows where command output (logs, diffs, test o
 ### 1) Install quickly
 
 ```bash
+brew untap jackymint/cliTokenKill 2>/dev/null || true
+brew tap jackymint/cliTokenKill https://github.com/jackymint/cliTokenKill
 brew install jackymint/cliTokenKill/ctk
 ctk --help
 ```
