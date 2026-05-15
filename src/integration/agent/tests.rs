@@ -176,6 +176,15 @@ fn init_result_reports_correct_bin_dir() {
 }
 
 #[test]
+fn claude_launcher_bypasses_wrapping_for_login() {
+    with_temp_home(|home| {
+        init_agent("claude", "claude-ctk").unwrap();
+        let launcher = fs::read_to_string(home.join(".ctk/launchers/claude-ctk")).unwrap();
+        assert!(launcher.contains("\"${1:-}\" == \"login\""));
+    });
+}
+
+#[test]
 fn uninstall_after_init_removes_bin_dir() {
     with_temp_home(|home| {
         init_agent("codex", "codex-ctk").unwrap();

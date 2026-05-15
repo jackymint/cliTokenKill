@@ -75,11 +75,19 @@ fn home_dir() -> Result<PathBuf> {
 }
 
 fn strip_top_level_settings(content: &str, keys: &[&str]) -> String {
+    let mut in_section = false;
     content
         .lines()
         .filter(|line| {
             let trimmed = line.trim();
-            !keys.iter().any(|key| trimmed.starts_with(key))
+            if trimmed.starts_with('[') && trimmed.ends_with(']') {
+                in_section = true;
+                return true;
+            }
+            if !in_section {
+                return !keys.iter().any(|key| line_has_key_assignment(trimmed, key));
+            }
+            true
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -92,7 +100,12 @@ fn ensure_features_section(config_content: &mut String) {
 }
 
 fn ensure_feature_setting(config_content: &mut String, setting: &str) {
-    if config_content.contains(setting) {
+    let Some((key, _)) = setting.split_once('=') else {
+        return;
+    };
+    let setting_key = key.trim();
+
+    if features_section_has_key(config_content, setting_key) {
         return;
     }
 
@@ -101,6 +114,58 @@ fn ensure_feature_setting(config_content: &mut String, setting: &str) {
         .expect("features section should exist")
         + "[features]".len();
     config_content.insert_str(insert_pos, &format!("\n{setting}"));
+}
+
+fn features_section_has_key(config_content: &str, key: &str) -> bool {
+    let mut in_features = false;
+    for line in config_content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            in_features = trimmed == "[features]";
+            continue;
+        }
+        if in_features && line_has_key_assignment(trimmed, key) {
+            return true;
+        }
+    }
+    false
+}
+
+fn line_has_key_assignment(trimmed_line: &str, key: &str) -> bool {
+    if trimmed_line.is_empty() || trimmed_line.starts_with('#') {
+        return false;
+    }
+    let Some((lhs, _rhs)) = trimmed_line.split_once('=') else {
+        return false;
+    };
+    lhs.trim() == key
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strip_top_level_settings_removes_only_root_assignments() {
+        let input = r#"
+sandbox_mode = "workspace-write"
+approval_policy="on-request"
+
+[profiles.safe]
+sandbox_mode = "workspace-write"
+"#;
+        let out = strip_top_level_settings(input, &["sandbox_mode", "approval_policy"]);
+        assert!(!out.contains("approval_policy=\"on-request\""));
+        assert!(out.contains("[profiles.safe]"));
+        assert!(out.contains("sandbox_mode = \"workspace-write\""));
+    }
+
+    #[test]
+    fn ensure_feature_setting_detects_existing_key_with_different_spacing() {
+        let mut input = String::from("[features]\ncodex_hooks=true\n");
+        ensure_feature_setting(&mut input, "codex_hooks = true");
+        assert_eq!(input.matches("codex_hooks").count(), 1);
+    }
 }
 
 struct CodexLayout {

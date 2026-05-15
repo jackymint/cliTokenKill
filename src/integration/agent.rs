@@ -352,7 +352,7 @@ fn create_launcher(
     let bin_dir_q = bash_double_quote(&layout.bin_dir);
     let real_agent_q = bash_double_quote(&real_agent);
     let script = format!(
-        "#!/usr/bin/env bash\nset -euo pipefail\ndepth=\"${{{LAUNCH_DEPTH_ENV}:-0}}\"\nif (( depth >= {MAX_LAUNCH_DEPTH} )); then\n  echo \"ctk: launcher recursion guard triggered ({agent_cmd})\" >&2\n  exit 125\nfi\nexport {LAUNCH_DEPTH_ENV}=\"$((depth + 1))\"\nexport {AI_ENV_FLAG}=1\nexport CTK_AI_CLI_NAME={agent_cmd}\nexport PATH=\"{bin_dir_q}:$PATH\"\nexec \"{real_agent_q}\" \"$@\"\n",
+        "#!/usr/bin/env bash\nset -euo pipefail\n\n# Claude login performs interactive auth/browser flow; bypass CTK wrapping for this subcommand.\nif [[ \"{agent_cmd}\" == \"claude\" && \"${{1:-}}\" == \"login\" ]]; then\n  exec \"{real_agent_q}\" \"$@\"\nfi\n\ndepth=\"${{{LAUNCH_DEPTH_ENV}:-0}}\"\nif (( depth >= {MAX_LAUNCH_DEPTH} )); then\n  echo \"ctk: launcher recursion guard triggered ({agent_cmd})\" >&2\n  exit 125\nfi\nexport {LAUNCH_DEPTH_ENV}=\"$((depth + 1))\"\nexport {AI_ENV_FLAG}=1\nexport CTK_AI_CLI_NAME={agent_cmd}\nexport PATH=\"{bin_dir_q}:$PATH\"\nexec \"{real_agent_q}\" \"$@\"\n",
     );
     fs::write(&launcher_path, script)
         .with_context(|| format!("failed to write launcher: {}", launcher_path.display()))?;
