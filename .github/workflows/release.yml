@@ -80,20 +80,22 @@ jobs:
           SHA=$(curl -fsSL "$URL" | sha256sum | awk '{print $1}')
           echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
 
-      - name: Update Homebrew formula SHA
+      - name: Update Homebrew formula
         run: |
+          TAG=${GITHUB_REF_NAME}
           SHA=${{ steps.source.outputs.sha256 }}
+          sed -i "s#archive/refs/tags/v[0-9][0-9.]*\.tar\.gz#archive/refs/tags/${TAG}.tar.gz#" Formula/ctk.rb
           sed -i "s/sha256 \".*\"/sha256 \"${SHA}\"/" Formula/ctk.rb
 
-      - name: Open PR to update formula SHA
+      - name: Open PR to update formula
         uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
         id: formula_pr
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: chore/formula-sha-${{ github.ref_name }}
-          commit-message: "Release ${{ github.ref_name }}: update Homebrew formula SHA256"
-          title: "Release ${{ github.ref_name }}: update Homebrew formula SHA256"
-          body: "Automated SHA256 update for the Homebrew formula. Triggered by release workflow."
+          commit-message: "Release ${{ github.ref_name }}: update Homebrew formula"
+          title: "Release ${{ github.ref_name }}: update Homebrew formula"
+          body: "Automated URL and SHA256 update for the Homebrew formula. Triggered by release workflow."
           base: main
 
       - name: Auto-merge formula PR
