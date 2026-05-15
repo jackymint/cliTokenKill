@@ -34,6 +34,11 @@ fn is_truthy_env_rejects_falsy_values() {
 }
 
 #[test]
+fn skip_wrapping_includes_keychain_security_cli() {
+    assert!(SKIP_WRAPPING.contains(&"security"));
+}
+
+#[test]
 fn launcher_target_name_strips_ctk_suffix() {
     assert_eq!(doctor::launcher_target_name("codex-ctk"), "codex");
     assert_eq!(doctor::launcher_target_name("claude-ctk"), "claude");
