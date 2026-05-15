@@ -39,6 +39,9 @@ const SKIP_WRAPPING: &[&str] = &[
     // process helpers
     "env",
     "which",
+    // macOS Keychain access can return auth tokens; compacting this output
+    // corrupts credentials for CLIs such as Claude Code.
+    "security",
     // container runtimes
     "docker",
     "docker-compose",
