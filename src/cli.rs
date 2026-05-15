@@ -110,6 +110,7 @@ pub(crate) enum Commands {
         allow_danger_full_access: bool,
     },
     /// Uninstall shell wrappers and launchers for AI CLI integrations
+    #[command(alias = "uninit")]
     Uninstall {
         /// Uninstall integration for Codex CLI
         #[arg(long)]
