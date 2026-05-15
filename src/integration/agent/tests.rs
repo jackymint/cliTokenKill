@@ -1,4 +1,5 @@
 use super::*;
+use std::os::unix::fs::PermissionsExt;
 use std::sync::Mutex;
 
 // ── pure functions ────────────────────────────────────────────────────────
@@ -178,9 +179,29 @@ fn init_result_reports_correct_bin_dir() {
 #[test]
 fn claude_launcher_bypasses_wrapping_for_login() {
     with_temp_home(|home| {
+        let fake_bin = home.join("fake-bin");
+        fs::create_dir_all(&fake_bin).unwrap();
+        let fake_claude = fake_bin.join("claude");
+        fs::write(&fake_claude, "#!/usr/bin/env bash\nexit 0\n").unwrap();
+        fs::set_permissions(&fake_claude, fs::Permissions::from_mode(0o755)).unwrap();
+
+        let old_path = env::var_os("PATH");
+        let mut paths = vec![fake_bin];
+        if let Some(path) = old_path.as_ref() {
+            paths.extend(env::split_paths(path));
+        }
+        unsafe { env::set_var("PATH", env::join_paths(paths).unwrap()) };
+
         init_agent("claude", "claude-ctk").unwrap();
         let launcher = fs::read_to_string(home.join(".ctk/launchers/claude-ctk")).unwrap();
         assert!(launcher.contains("\"${1:-}\" == \"login\""));
+
+        unsafe {
+            match old_path {
+                Some(path) => env::set_var("PATH", path),
+                None => env::remove_var("PATH"),
+            }
+        }
     });
 }
 
